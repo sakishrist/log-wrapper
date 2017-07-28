@@ -22,6 +22,14 @@ my $REG = {
 #   HELPER FUNCTIONS    #
 #########################
 
+sub matchFile ($) {
+	my $line = shift;
+
+	if ( $line =~ '^==> (.*) <==$' ) {
+		return $1;
+	}
+}
+
 sub matchGroup ($) {
 	my $line = shift;
 	our $REG_OBJ;
@@ -91,11 +99,17 @@ sub printLines () {
 	# SET POSITION = \e[1;1H
 	# CLEAR LINE = \e[K
 	$chars .= "\e[1;1H\e[30;43m Printed: " . ($COUNT-$SKIPPED-$AGGREGATED) . " - Skipped: $SKIPPED - Aggregated: $AGGREGATED\e[K\e[0m";
-	print "rows: $rows; BUFFER: $#BUFFER; min: " . (($rows-2, $#BUFFER)[$rows-2 > $#BUFFER]) . "\n";
+
 	my $start = $#BUFFER - ($rows-2, $#BUFFER)[$rows-2 > $#BUFFER];
 	my $end = $#BUFFER;
 	for ( my $linenum=$start; $linenum <= $end; $linenum++ ) {
-		$chars .= "\n$BUFFER[$linenum][0]";
+		$chars .= "\n ";
+		if (length($BUFFER[$linenum][2]) <= 22) {
+			$chars .= sprintf ( "%-22s", $BUFFER[$linenum][2]);
+		} else {
+			$chars .= "..." . substr ( $BUFFER[$linenum][2], -19 );
+		}
+		$chars .= " | $BUFFER[$linenum][0]";
 		$chars .= " \e[1m(" . ($BUFFER[$linenum][1]+1) . ")\e[0m" if $BUFFER[$linenum][1];
 	}
 	print $chars;
@@ -115,14 +129,21 @@ our $REG_OBJ = {};
 compileRegs();
 
 our @BUFFER;
+our $LAST_POS_INDEX = {};
 
 our $COUNT = 0;
 our $AGGREGATED = 0;
 our $SKIPPED = 0;
 
+our $CUR_FILE;
+
 my $LAST_MATCH = "";
 
 print "\e[?1049h";
+
+#########################
+#         MAIN          #
+#########################
 
 while (my $line = readline(*STDIN) ) {
 	$COUNT++;
@@ -130,29 +151,35 @@ while (my $line = readline(*STDIN) ) {
 
 	my $match = matchGroup($line);
 
-	if (skipLine($match)) {
+	if ($line =~ '^$') {
+		# noop
+	} elsif (my $f = matchFile($line)) {
+		$CUR_FILE = $f;
+	} elsif (skipLine($match)) {
 		$SKIPPED++;
 	} else {
 		if ($match) {
-			if ( $LAST_MATCH eq $match ) {
+			if ( $BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] eq $match ) {
 				$AGGREGATED++;
+
+				push(@BUFFER, splice(@BUFFER, $LAST_POS_INDEX->{$CUR_FILE}, 1));
+				$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
 
 				$BUFFER[$#BUFFER][0]=$line;
 				$BUFFER[$#BUFFER][1]++;
-
 			} else {
-				push @BUFFER, [$line, 0]
-			}
+				push @BUFFER, [$line, 0, $CUR_FILE];
+				$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
 
-			$LAST_MATCH = $match;
+				$BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] = $match;
+			}
 		} else {
-			push @BUFFER, [$line, 0];
-			$LAST_MATCH = "";
+			push @BUFFER, [$line, 0, $CUR_FILE];
+			$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
 		}
 	}
 
 	printLines();
 }
-
 
 print "\e[?1049l";
