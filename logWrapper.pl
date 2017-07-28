@@ -105,6 +105,8 @@ sub printLines () {
 #         INIT          #
 #########################
 
+$SIG{INT} = sub { print "\e[?1049l" };
+
 $|=1;
 
 our $OMMIT_GROUPS = [  ];
@@ -119,6 +121,8 @@ our $AGGREGATED = 0;
 our $SKIPPED = 0;
 
 my $LAST_MATCH = "";
+
+print "\e[?1049h";
 
 while (my $line = readline(*STDIN) ) {
 	$COUNT++;
@@ -149,3 +153,6 @@ while (my $line = readline(*STDIN) ) {
 
 	printLines();
 }
+
+
+print "\e[?1049l";
