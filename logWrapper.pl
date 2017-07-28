@@ -4,6 +4,8 @@ use 5.010;
 use strict;
 use warnings;
 
+require 'sys/ioctl.ph';
+
 #use Data::Dumper;
 
 #########################
@@ -69,6 +71,36 @@ sub compileRegs () {
 	#exit 0;
 }
 
+sub getwinsize {
+	my $winsize = ""; # Silence warning
+	if (ioctl(STDOUT, TIOCGWINSZ() , $winsize)) {
+		return unpack 'S4', $winsize;
+	}
+}
+
+sub printLines () {
+	our ($COUNT, $SKIPPED, $AGGREGATED, @BUFFER);
+	my $chars;
+	my ($rows, $cols) = getwinsize();
+
+	# clear
+	$chars .= "\e[2J\e[1;1H\n";
+
+	# SAVE = \e[s
+	# RESTORE = \e[u
+	# SET POSITION = \e[1;1H
+	# CLEAR LINE = \e[K
+	$chars .= "\e[1;1H\e[30;43m Printed: " . ($COUNT-$SKIPPED-$AGGREGATED) . " - Skipped: $SKIPPED - Aggregated: $AGGREGATED\e[K\e[0m";
+	print "rows: $rows; BUFFER: $#BUFFER; min: " . (($rows-2, $#BUFFER)[$rows-2 > $#BUFFER]) . "\n";
+	my $start = $#BUFFER - ($rows-2, $#BUFFER)[$rows-2 > $#BUFFER];
+	my $end = $#BUFFER;
+	for ( my $linenum=$start; $linenum <= $end; $linenum++ ) {
+		$chars .= "\n$BUFFER[$linenum][0]";
+		$chars .= " \e[1m(" . ($BUFFER[$linenum][1]+1) . ")\e[0m" if $BUFFER[$linenum][1];
+	}
+	print $chars;
+}
+
 #########################
 #         INIT          #
 #########################
@@ -80,15 +112,13 @@ our $OMMIT_GROUPS = [  ];
 our $REG_OBJ = {};
 compileRegs();
 
-my $COUNT = 0;
-my $AGGREGATED = 0;
-my $CURR_SKIPPED = 0;
-my $SKIPPED = 0;
+our @BUFFER;
+
+our $COUNT = 0;
+our $AGGREGATED = 0;
+our $SKIPPED = 0;
 
 my $LAST_MATCH = "";
-
-# clear
-print "\e[2J\e[1;1H\n";
 
 while (my $line = readline(*STDIN) ) {
 	$COUNT++;
@@ -102,25 +132,20 @@ while (my $line = readline(*STDIN) ) {
 		if ($match) {
 			if ( $LAST_MATCH eq $match ) {
 				$AGGREGATED++;
-				$CURR_SKIPPED++;
-				print "\r$line \e[1m(" . ($CURR_SKIPPED+1) . ")\e[0m\e[K";
+
+				$BUFFER[$#BUFFER][0]=$line;
+				$BUFFER[$#BUFFER][1]++;
+
 			} else {
-				print "\n" if ( $LAST_MATCH );
-				print "$line";
-				$CURR_SKIPPED = 0;
+				push @BUFFER, [$line, 0]
 			}
 
 			$LAST_MATCH = $match;
 		} else {
-			print "\n" if ( $LAST_MATCH );
-			print "$line\n";
+			push @BUFFER, [$line, 0];
 			$LAST_MATCH = "";
-			$CURR_SKIPPED = 0;
 		}
 	}
 
-	print "\e[s\e[1;1H\e[30;43m\e[KPrinted: " . ($COUNT-$SKIPPED-$AGGREGATED) . " - Skipped: $SKIPPED - Aggregated: $AGGREGATED\e[0m\e[u";
-
+	printLines();
 }
-
-print "\n" if ( $LAST_MATCH );
