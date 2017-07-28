@@ -12,7 +12,7 @@ use warnings;
 
 my $REG = {
 	"object_recovery" => [
-		'cinnamon-screensaver-pam-helper',
+		'CRON\[',
 	],
 };
 
@@ -122,3 +122,5 @@ while (my $line = readline(*STDIN) ) {
 	print "\e[s\e[1;1H\e[30;43m\e[KPrinted: " . ($COUNT-$SKIPPED-$AGGREGATED) . " - Skipped: $SKIPPED - Aggregated: $AGGREGATED\e[0m\e[u";
 
 }
+
+print "\n" if ( $LAST_MATCH );
