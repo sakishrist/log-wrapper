@@ -105,42 +105,59 @@ sub getwinsize {
 	}
 }
 
+sub printLine ($) {
+	my $linenum = shift;
+	my $chars;
+	our @BUFFER;
+
+	if (length($BUFFER[$linenum][2]) <= 30) {
+		$chars .= " " . sprintf ( "%-30s", $BUFFER[$linenum][2]);
+	} else {
+		$chars .= " ..." . substr ( $BUFFER[$linenum][2], -27 );
+	}
+
+	$chars .= " | $BUFFER[$linenum][0]";
+	$chars .= " \e[1m(" . ($BUFFER[$linenum][1]+1) . ")\e[0m" if $BUFFER[$linenum][1];
+
+	return $chars;
+}
+
 sub printLines () {
-	our ($COUNT, $SKIPPED, $AGGREGATED, @BUFFER);
+	our ($COUNT, $SKIPPED, $AGGREGATED, @BUFFER, $TO_PRINT);
 	my $chars;
 	my ($rows, $cols) = getwinsize();
-
-	# clear
-	$chars .= "\e[2J\e[1;1H\n";
 
 	# SAVE = \e[s
 	# RESTORE = \e[u
 	# SET POSITION = \e[1;1H
 	# CLEAR LINE = \e[K
+
+	if ($TO_PRINT == 0 || $TO_PRINT > $rows-2) {
+		$chars .= "\e[".$rows.";".$cols."H\n";
+		$chars .= printLine($#BUFFER);
+	} elsif ($TO_PRINT > 0) {
+		#TODO Handle when $TO_PRING is larger than the screen
+		$chars .= "\e[".($rows-$TO_PRINT).";".$cols."H";
+		for ( my $linenum=$TO_PRINT-1; $linenum >= 0; $linenum-- ) {
+			$chars .= "\n" . printLine($#BUFFER-$linenum) . "\e[K";
+		}
+	} else {
+		return;
+	}
+
 	$chars .= "\e[1;1H\e[30;43m Printed: " . ($COUNT-$SKIPPED-$AGGREGATED) . " - Skipped: $SKIPPED - Aggregated: $AGGREGATED\e[K\e[0m";
 
-	my $start = $#BUFFER - ($rows-2, $#BUFFER)[$rows-2 > $#BUFFER];
-	my $end = $#BUFFER;
-	for ( my $linenum=$start; $linenum <= $end; $linenum++ ) {
-		$chars .= "\n ";
-		if (length($BUFFER[$linenum][2]) <= 30) {
-			$chars .= sprintf ( "%-30s", $BUFFER[$linenum][2]);
-		} else {
-			$chars .= "..." . substr ( $BUFFER[$linenum][2], -27 );
-		}
-		$chars .= " | $BUFFER[$linenum][0]";
-		$chars .= " \e[1m(" . ($BUFFER[$linenum][1]+1) . ")\e[0m" if $BUFFER[$linenum][1];
-	}
 	print $chars;
 }
 
 sub proccessLine ($) {
-	our ($COUNT, $CUR_FILE, $SKIPPED, @BUFFER, $AGGREGATED, $LAST_POS_INDEX);
+	our ($COUNT, $CUR_FILE, $SKIPPED, @BUFFER, $AGGREGATED, $LAST_POS_INDEX, $TO_PRINT);
 	my $line = shift;
 
 
 	chomp( $line );
 
+	$TO_PRINT = -1;
 	# IGNORE EMPTY LINES
 	return if ($line =~ '^$');
 
@@ -163,19 +180,25 @@ sub proccessLine ($) {
 		if ( defined $LAST_POS_INDEX->{$CUR_FILE} && defined $BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] && $BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] eq $match ) {
 			$AGGREGATED++;
 
+			$TO_PRINT = $#BUFFER - $LAST_POS_INDEX->{$CUR_FILE} + 1;
 			push(@BUFFER, splice(@BUFFER, $LAST_POS_INDEX->{$CUR_FILE}, 1));
 			$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
+
 			updateIndices();
 
 			$BUFFER[$#BUFFER][0]=$line;
 			$BUFFER[$#BUFFER][1]++;
 		} else {
+			$TO_PRINT = 0;
+
 			push @BUFFER, [$line, 0, $CUR_FILE];
 			$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
 
 			$BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] = $match;
 		}
 	} else {
+		$TO_PRINT = 0;
+
 		push @BUFFER, [$line, 0, $CUR_FILE];
 		$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
 	}
@@ -206,15 +229,17 @@ our @BUFFER;
 our $LAST_POS_INDEX = {};
 our $CUR_FILE;
 
+our $TO_PRINT;
+
 our $COUNT = 0;
 our $AGGREGATED = 0;
 our $SKIPPED = 0;
 
-print "\e[?1049h";
-
 #########################
 #         MAIN          #
 #########################
+
+print "\e[?1049h";
 
 while (my $line = readline(*STDIN) ) {
 	proccessLine($line);
