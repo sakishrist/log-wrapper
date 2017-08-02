@@ -12,17 +12,22 @@ require 'sys/ioctl.ph';
 #        CONFIG         #
 #########################
 
-my $REG = {
-	"object_recovery" => [
-		'CRON\[',
-	],
+our $REG = {
+	"stats" => {
+		"filename" => "resourceagent",
+		"reg_groups" => {
+			"inactive" => [
+				'DBG|MSG',
+			],
+		}
+	},
 };
 
 #########################
 #   HELPER FUNCTIONS    #
 #########################
 
-sub matchFile ($) {
+sub matchTailFilename ($) {
 	my $line = shift;
 
 	if ( $line =~ '^==> (.*) <==$' ) {
@@ -30,12 +35,28 @@ sub matchFile ($) {
 	}
 }
 
-sub matchGroup ($) {
-	my $line = shift;
-	our $REG_OBJ;
+sub matchFile ($) {
+	my $file = shift;
 
-	foreach my $reg_group (keys %$REG) {
-		if ( $line =~ $REG_OBJ->{main}->{$reg_group} ) {
+	foreach my $reg_file_group (keys %$REG) {
+		if ( $file =~ $REG->{$reg_file_group}->{filename} ) {
+			return $reg_file_group;
+		}
+	}
+}
+
+sub matchGroup ($$) {
+	my $line = shift;
+	my $file = shift;
+
+	our $REG;
+	my $filematch;
+	if (! ( $filematch = matchFile($file) )) {
+		return;
+	}
+
+	foreach my $reg_group (keys %{$REG->{$filematch}->{reg_groups}}) {
+		if ( $line =~ $REG->{$filematch}->{reg_groups}->{$reg_group} ) {
 			return $reg_group;
 		}
 	}
@@ -54,29 +75,27 @@ sub skipLine ($) {
 }
 
 sub compileRegs () {
-	our $REG_OBJ;
+	our $REG;
 
-	# COMPILE MAIN
-	$REG_OBJ->{main} = {};
-	foreach my $reg_group (keys %$REG) {
-		my $reg_str = '(';
-		my $first = 1;
+	foreach my $reg_file_group (keys %$REG) {
 
-		foreach my $reg ( @{ $REG->{$reg_group} } ) {
-			if ($first) {
-				$first=0;
-			} else {
-				$reg_str .= '|';
+		foreach my $reg_group (keys %{$REG->{$reg_file_group}->{reg_groups}}) {
+			my $reg_str = '(';
+			my $first = 1;
+
+			foreach my $reg ( @{ $REG->{$reg_file_group}->{reg_groups}->{$reg_group} } ) {
+				if ($first) {
+					$first=0;
+				} else {
+					$reg_str .= '|';
+				}
+
+				$reg_str .= $reg;
 			}
-
-			$reg_str .= $reg;
+			$reg_str .= ")";
+			$REG->{$reg_file_group}->{reg_groups}->{$reg_group} = qr/$reg_str/;
 		}
-		$reg_str .= ")";
-		$REG_OBJ->{main}->{$reg_group} = qr/$reg_str/;
 	}
-
-	#print Dumper($REG_OBJ) . "\n";
-	#exit 0;
 }
 
 sub getwinsize {
@@ -104,15 +123,71 @@ sub printLines () {
 	my $end = $#BUFFER;
 	for ( my $linenum=$start; $linenum <= $end; $linenum++ ) {
 		$chars .= "\n ";
-		if (length($BUFFER[$linenum][2]) <= 22) {
-			$chars .= sprintf ( "%-22s", $BUFFER[$linenum][2]);
+		if (length($BUFFER[$linenum][2]) <= 30) {
+			$chars .= sprintf ( "%-30s", $BUFFER[$linenum][2]);
 		} else {
-			$chars .= "..." . substr ( $BUFFER[$linenum][2], -19 );
+			$chars .= "..." . substr ( $BUFFER[$linenum][2], -27 );
 		}
 		$chars .= " | $BUFFER[$linenum][0]";
 		$chars .= " \e[1m(" . ($BUFFER[$linenum][1]+1) . ")\e[0m" if $BUFFER[$linenum][1];
 	}
 	print $chars;
+}
+
+sub proccessLine ($) {
+	our ($COUNT, $CUR_FILE, $SKIPPED, @BUFFER, $AGGREGATED, $LAST_POS_INDEX);
+	my $line = shift;
+
+
+	chomp( $line );
+
+	# IGNORE EMPTY LINES
+	return if ($line =~ '^$');
+
+	# MATCH TAIL FILENAME LINES
+	if (my $f = matchTailFilename($line)) {
+		$CUR_FILE = $f;
+		return;
+	}
+	$COUNT++;
+	my $match = matchGroup($line, $CUR_FILE);
+
+	if ($match) {
+		# SKIP LINES THAT MATCH CERTAIN GROUPS
+		if (skipLine($match)) {
+			$SKIPPED++;
+			return;
+		}
+
+		# PROCCESS THE REST OF THE LINES
+		if ( defined $LAST_POS_INDEX->{$CUR_FILE} && defined $BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] && $BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] eq $match ) {
+			$AGGREGATED++;
+
+			push(@BUFFER, splice(@BUFFER, $LAST_POS_INDEX->{$CUR_FILE}, 1));
+			$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
+			updateIndices();
+
+			$BUFFER[$#BUFFER][0]=$line;
+			$BUFFER[$#BUFFER][1]++;
+		} else {
+			push @BUFFER, [$line, 0, $CUR_FILE];
+			$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
+
+			$BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] = $match;
+		}
+	} else {
+		push @BUFFER, [$line, 0, $CUR_FILE];
+		$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
+	}
+}
+
+sub updateIndices () {
+	our ($TO_PRINT, @BUFFER, $LAST_POS_INDEX);
+	print STDERR "from " . ($TO_PRINT-1) . " to 0\n";
+	for ( my $linenum=$TO_PRINT-1; $linenum >= 0; $linenum-- ) {
+		print STDERR "Changing LAST_POS_INDEX for file " . $BUFFER[$#BUFFER-$linenum][2] . " to " . ($#BUFFER-$linenum) ."\n";
+		$LAST_POS_INDEX->{$BUFFER[$#BUFFER-$linenum][2]} = $#BUFFER-$linenum;
+	}
 }
 
 #########################
@@ -125,19 +200,15 @@ $|=1;
 
 our $OMMIT_GROUPS = [  ];
 
-our $REG_OBJ = {};
 compileRegs();
 
 our @BUFFER;
 our $LAST_POS_INDEX = {};
+our $CUR_FILE;
 
 our $COUNT = 0;
 our $AGGREGATED = 0;
 our $SKIPPED = 0;
-
-our $CUR_FILE;
-
-my $LAST_MATCH = "";
 
 print "\e[?1049h";
 
@@ -146,39 +217,7 @@ print "\e[?1049h";
 #########################
 
 while (my $line = readline(*STDIN) ) {
-	$COUNT++;
-	chomp( $line );
-
-	my $match = matchGroup($line);
-
-	if ($line =~ '^$') {
-		# noop
-	} elsif (my $f = matchFile($line)) {
-		$CUR_FILE = $f;
-	} elsif (skipLine($match)) {
-		$SKIPPED++;
-	} else {
-		if ($match) {
-			if ( $BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] eq $match ) {
-				$AGGREGATED++;
-
-				push(@BUFFER, splice(@BUFFER, $LAST_POS_INDEX->{$CUR_FILE}, 1));
-				$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
-
-				$BUFFER[$#BUFFER][0]=$line;
-				$BUFFER[$#BUFFER][1]++;
-			} else {
-				push @BUFFER, [$line, 0, $CUR_FILE];
-				$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
-
-				$BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] = $match;
-			}
-		} else {
-			push @BUFFER, [$line, 0, $CUR_FILE];
-			$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
-		}
-	}
-
+	proccessLine($line);
 	printLines();
 }
 
