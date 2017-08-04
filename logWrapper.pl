@@ -34,7 +34,6 @@ our $OMMIT_GROUPS = [  ];
 	use 5.010;
 	use strict;
 	use warnings;
-	use IO::Select;
 
 	require 'sys/ioctl.ph';
 
@@ -170,6 +169,7 @@ our $OMMIT_GROUPS = [  ];
 	use 5.010;
 	use strict;
 	use warnings;
+	use IO::Select;
 
 	sub new ($$) {
 		my $class = shift;
@@ -186,10 +186,12 @@ our $OMMIT_GROUPS = [  ];
 		             'lastPosIndex' => {},
 		             'reg' => $reg,
 		             'omit' => $omit,
+		             'stdin' => IO::Select->new(),
 		           };
 
 		bless $self, $class;
 
+		$self->{stdin}->add(\*STDIN);
 		$self->compileRegs();
 
 		return $self;
@@ -349,6 +351,17 @@ our $OMMIT_GROUPS = [  ];
 			$$posIndex = (scalar @{$buff})-1;
 		}
 	}
+
+	sub readLine() {
+		my $self = shift;
+
+		if ( $self->{stdin}->can_read(1) ) {
+			my $line;
+			return 0 if ! ( defined ($line = readline(*STDIN)) );
+			$self->proccessLine($line);
+			return 1;
+		}
+	}
 }
 
 #########################
@@ -372,8 +385,8 @@ $SIG{INT} = sub { $termCon->endAlternate(); };
 
 $termCon->startAlternate();
 
-while (my $line = readline(*STDIN) ) {
-	$buffCon->proccessLine($line);
+while (1) {
+	$buffCon->readLine() or last;
 	$termCon->output();
 }
 
