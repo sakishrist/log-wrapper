@@ -4,8 +4,6 @@ use 5.010;
 use strict;
 use warnings;
 
-require 'sys/ioctl.ph';
-
 #use Data::Dumper;
 
 #########################
@@ -14,236 +12,369 @@ require 'sys/ioctl.ph';
 
 our $REG = {
 	"stats" => {
-		"filename" => "resourceagent",
+		"filename" => "file",
 		"reg_groups" => {
 			"inactive" => [
-				'DBG|MSG',
+				'file',
 			],
 		}
 	},
 };
 
+our $OMMIT_GROUPS = [  ];
+
 #########################
-#   HELPER FUNCTIONS    #
+#       PACKAGES        #
 #########################
 
-sub matchTailFilename ($) {
-	my $line = shift;
+# Package: termControl
+{
+	package TerminalControl;
 
-	if ( $line =~ '^==> (.*) <==$' ) {
-		return $1;
-	}
-}
+	use 5.010;
+	use strict;
+	use warnings;
+	use IO::Select;
 
-sub matchFile ($) {
-	my $file = shift;
-
-	foreach my $reg_file_group (keys %$REG) {
-		if ( $file =~ $REG->{$reg_file_group}->{filename} ) {
-			return $reg_file_group;
-		}
-	}
-}
-
-sub matchGroup ($$) {
-	my $line = shift;
-	my $file = shift;
-
-	our $REG;
-	my $filematch;
-	if (! ( $filematch = matchFile($file) )) {
-		return;
-	}
-
-	foreach my $reg_group (keys %{$REG->{$filematch}->{reg_groups}}) {
-		if ( $line =~ $REG->{$filematch}->{reg_groups}->{$reg_group} ) {
-			return $reg_group;
-		}
-	}
-}
-
-sub skipLine ($) {
-	my $match = shift;
-	our $OMMIT_GROUPS;
-
-	foreach my $ommit_group (@$OMMIT_GROUPS) {
-		if ( $ommit_group eq $match ) {
-			return 1;
-		}
-	}
-	return 0;
-}
-
-sub compileRegs () {
-	our $REG;
-
-	foreach my $reg_file_group (keys %$REG) {
-
-		foreach my $reg_group (keys %{$REG->{$reg_file_group}->{reg_groups}}) {
-			my $reg_str = '(';
-			my $first = 1;
-
-			foreach my $reg ( @{ $REG->{$reg_file_group}->{reg_groups}->{$reg_group} } ) {
-				if ($first) {
-					$first=0;
-				} else {
-					$reg_str .= '|';
-				}
-
-				$reg_str .= $reg;
-			}
-			$reg_str .= ")";
-			$REG->{$reg_file_group}->{reg_groups}->{$reg_group} = qr/$reg_str/;
-		}
-	}
-}
-
-sub getwinsize {
-	my $winsize = ""; # Silence warning
-	if (ioctl(STDOUT, TIOCGWINSZ() , $winsize)) {
-		return unpack 'S4', $winsize;
-	}
-}
-
-sub printLine ($) {
-	my $linenum = shift;
-	my $chars;
-	our @BUFFER;
-
-	if (length($BUFFER[$linenum][2]) <= 30) {
-		$chars .= " " . sprintf ( "%-30s", $BUFFER[$linenum][2]);
-	} else {
-		$chars .= " ..." . substr ( $BUFFER[$linenum][2], -27 );
-	}
-
-	$chars .= " | $BUFFER[$linenum][0]";
-	$chars .= " \e[1m(" . ($BUFFER[$linenum][1]+1) . ")\e[0m" if $BUFFER[$linenum][1];
-
-	return $chars;
-}
-
-sub printLines () {
-	our ($COUNT, $SKIPPED, $AGGREGATED, @BUFFER, $TO_PRINT);
-	my $chars;
-	my ($rows, $cols) = getwinsize();
+	require 'sys/ioctl.ph';
 
 	# SAVE = \e[s
 	# RESTORE = \e[u
 	# SET POSITION = \e[1;1H
 	# CLEAR LINE = \e[K
 
-	if ($TO_PRINT == 0 || $TO_PRINT > $rows-2) {
-		$chars .= "\e[".$rows.";".$cols."H\n";
-		$chars .= printLine($#BUFFER);
-	} elsif ($TO_PRINT > 0) {
-		#TODO Handle when $TO_PRING is larger than the screen
-		$chars .= "\e[".($rows-$TO_PRINT).";".$cols."H";
-		for ( my $linenum=$TO_PRINT-1; $linenum >= 0; $linenum-- ) {
-			$chars .= "\n" . printLine($#BUFFER-$linenum) . "\e[K";
-		}
-	} else {
-		return;
+	sub new ($) {
+		my $class = shift;
+		my $buffCon = shift;
+		my $self = { 'buffCon' => $buffCon,
+		             'chars' => '', };
+
+		bless $self, $class;
+
+		($self->{rows}, $self->{cols}) = $self->getwinsize();
+
+		return $self;
 	}
 
-	$chars .= "\e[1;1H\e[30;43m Printed: " . ($COUNT-$SKIPPED-$AGGREGATED) . " - Skipped: $SKIPPED - Aggregated: $AGGREGATED\e[K\e[0m";
+	sub startAlternate { print "\e[?1049h"; }
+	sub endAlternate { print "\e[?1049l"; }
 
-	print $chars;
+	sub getwinsize {
+		my $winsize = ""; # Silence warning
+		if (ioctl(STDOUT, TIOCGWINSZ() , $winsize)) {
+			return unpack 'S4', $winsize;
+		}
+	}
+
+	sub clrLine {
+		my $self = shift;
+		my $chars = \$self->{chars};
+
+		$$chars .= "\e[K";
+	}
+
+	sub nl {
+		my $self = shift;
+		my $chars = \$self->{chars};
+
+		$$chars .= "\n";
+	}
+
+	sub mvCur ($$) {
+		my $self = shift;
+		my ($r,$c) = @_;
+
+		my $chars = \$self->{chars};
+
+		$r = $self->{rows} + $r +1 if ($r < 0);
+		$c = $self->{cols} + $c +1 if ($c < 0);
+
+		$$chars .= "\e[".$r.";".$c."H";
+	}
+
+	sub addLine ($) {
+		my $self = shift;
+		my $linenum = shift;
+
+		my $chars = \$self->{chars};
+		my $line = $self->{buffCon}->{buff}->[$linenum];
+
+		if (length($line->[2]) <= 30) {
+			$$chars .= " " . sprintf ( "%-30s", $line->[2]);
+		} else {
+			$$chars .= " ..." . substr ( $line->[2], -27 );
+		}
+
+		$$chars .= " | " . $line->[0];
+		$$chars .= " \e[1m(" . ($line->[1]+1) . ")\e[0m" if $line->[1];
+	}
+
+	sub addHeader {
+		my $self = shift;
+
+		my $count = $self->{buffCon}->{count};
+		my $skipped = $self->{buffCon}->{skipped};
+		my $aggregated = $self->{buffCon}->{aggregated};
+
+		my $chars = \$self->{chars};
+
+		$$chars .= "\e[1;1H\e[30;43m Printed: " . ($count-$skipped-$aggregated) . " - Skipped: $skipped - Aggregated: $aggregated\e[K\e[0m";
+	}
+
+	sub constructLines () {
+		my $self = shift;
+
+		my $buff = $self->{buffCon}->{buff};
+		my $toPrint = \$self->{buffCon}->{toPrint};
+
+		if ($$toPrint == 0 || $$toPrint > $self->{rows}-2) {
+			$self->mvCur(-1, -1);
+			$self->nl();
+			$self->addLine((scalar @{$buff})-1);
+		} elsif ($$toPrint > 0) {
+			# FIXME I might have messed up the math here
+			mvCur(-1 - $$toPrint, -1);
+			for ( my $linenum=$$toPrint-1; $linenum >= 0; $linenum-- ) {
+				$self->nl();
+				$self->addLine(((scalar @{$buff})-1)-$linenum);
+				$self->clrLine();
+			}
+		} else {
+			return;
+		}
+	}
+
+	sub output {
+		my $self = shift;
+
+		$self->constructLines();
+		$self->addHeader();
+
+		$self->print();
+	}
+
+	sub print {
+		my $self = shift;
+
+		my $chars = \$self->{chars};
+		print $$chars;
+		$$chars = '';
+	}
+
 }
 
-sub proccessLine ($) {
-	our ($COUNT, $CUR_FILE, $SKIPPED, @BUFFER, $AGGREGATED, $LAST_POS_INDEX, $TO_PRINT);
-	my $line = shift;
+# Package: BufferControl
+{
+	package BufferControl;
 
+	use 5.010;
+	use strict;
+	use warnings;
 
-	chomp( $line );
+	sub new ($$) {
+		my $class = shift;
+		my $reg = shift;
+		my $omit = shift;
 
-	$TO_PRINT = -1;
-	# IGNORE EMPTY LINES
-	return if ($line =~ '^$');
+		my $self = {
+		             'buff' => [],
+		             'count' => 0,
+		             'skipped' => 0,
+		             'aggregated' => 0,
+		             'toPrint' => 0,
+		             'curFile' => '',
+		             'lastPosIndex' => {},
+		             'reg' => $reg,
+		             'omit' => $omit,
+		           };
 
-	# MATCH TAIL FILENAME LINES
-	if (my $f = matchTailFilename($line)) {
-		$CUR_FILE = $f;
-		return;
+		bless $self, $class;
+
+		$self->compileRegs();
+
+		return $self;
 	}
-	$COUNT++;
-	my $match = matchGroup($line, $CUR_FILE);
 
-	if ($match) {
-		# SKIP LINES THAT MATCH CERTAIN GROUPS
-		if (skipLine($match)) {
-			$SKIPPED++;
+	sub skipLine ($) {
+		my $self = shift;
+		my $match = shift;
+
+		my $omit = $self->{omit};
+
+		foreach my $omit_group (@{$omit}) {
+			if ( $omit_group eq $match ) {
+				return 1;
+			}
+		}
+		return 0;
+	}
+
+	sub compileRegs () {
+		my $self = shift;
+
+		my $reg = $self->{reg};
+
+		foreach my $reg_file_group (keys %{$reg}) {
+
+			foreach my $reg_group (keys %{$reg->{$reg_file_group}->{reg_groups}}) {
+				my $reg_str = '(';
+				my $first = 1;
+
+				foreach my $r ( @{ $reg->{$reg_file_group}->{reg_groups}->{$reg_group} } ) {
+					if ($first) {
+						$first=0;
+					} else {
+						$reg_str .= '|';
+					}
+
+					$reg_str .= $r;
+				}
+				$reg_str .= ")";
+				$reg->{$reg_file_group}->{reg_groups}->{$reg_group} = qr/$reg_str/;
+			}
+		}
+	}
+
+	sub updateIndices () {
+		my $self = shift;
+
+		my $buff = $self->{buff};
+		my $toPrint = \$self->{toPrint};
+		my $lastPosIndex = $self->{lastPosIndex};
+
+		for ( my $linenum=$$toPrint-1; $linenum >= 0; $linenum-- ) {
+			$lastPosIndex->{$buff->[(scalar @{$buff})-$linenum-1][2]} = (scalar @{$buff})-$linenum-1;
+		}
+	}
+
+	sub matchTailFilename ($) {
+		my $self = shift;
+		my $line = shift;
+
+		if ( $line =~ '^==> (.*) <==$' ) {
+			return $1;
+		}
+	}
+
+	sub matchFile ($) {
+		my $self = shift;
+		my $file = shift;
+
+		my $reg = $self->{reg};
+
+		foreach my $reg_file_group (keys %{$reg}) {
+			if ( $file =~ $reg->{$reg_file_group}->{filename} ) {
+				return $reg_file_group;
+			}
+		}
+	}
+
+	sub matchGroup ($$) {
+		my $self = shift;
+		my $line = shift;
+		my $file = shift;
+
+		my $filematch;
+		if (! ( $filematch = $self->matchFile($file) )) {
 			return;
 		}
 
-		# PROCCESS THE REST OF THE LINES
-		if ( defined $LAST_POS_INDEX->{$CUR_FILE} && defined $BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] && $BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] eq $match ) {
-			$AGGREGATED++;
+		my $regGroups = $self->{reg}->{$filematch}->{reg_groups};
 
-			$TO_PRINT = $#BUFFER - $LAST_POS_INDEX->{$CUR_FILE} + 1;
-			push(@BUFFER, splice(@BUFFER, $LAST_POS_INDEX->{$CUR_FILE}, 1));
-			$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
-
-			updateIndices();
-
-			$BUFFER[$#BUFFER][0]=$line;
-			$BUFFER[$#BUFFER][1]++;
-		} else {
-			$TO_PRINT = 0;
-
-			push @BUFFER, [$line, 0, $CUR_FILE];
-			$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
-
-			$BUFFER[$LAST_POS_INDEX->{$CUR_FILE}][3] = $match;
+		foreach my $reg_group (keys %{$regGroups}) {
+			if ( $line =~ $regGroups->{$reg_group} ) {
+				return $reg_group;
+			}
 		}
-	} else {
-		$TO_PRINT = 0;
+	}
 
-		push @BUFFER, [$line, 0, $CUR_FILE];
-		$LAST_POS_INDEX->{$CUR_FILE} = $#BUFFER;
+	sub proccessLine ($) {
+		my $self = shift;
+		my $line = shift;
+
+		my $curFile = \$self->{curFile};
+		my $buff = $self->{buff};
+		my $count = \$self->{count};
+		my $toPrint = \$self->{toPrint};
+		my $skipped = \$self->{skipped};
+		my $aggregated = \$self->{aggregated};
+		my $posIndex = \$self->{lastPosIndex}->{$$curFile};
+
+
+		chomp( $line );
+
+		$$toPrint = -1;
+		# IGNORE EMPTY LINES
+		return if ($line =~ '^$');
+
+		# MATCH TAIL FILENAME LINES
+		if (my $f = $self->matchTailFilename($line)) {
+			$$curFile = $f;
+			return;
+		}
+		$$count++;
+		my $match = $self->matchGroup($line, $$curFile);
+
+		if ($match) {
+			# SKIP LINES THAT MATCH CERTAIN GROUPS
+			if ($self->skipLine($match)) {
+				$$skipped++;
+				return;
+			}
+
+			# PROCCESS THE REST OF THE LINES
+			if ( defined $$posIndex && defined $buff->[$$posIndex][3] && $buff->[$$posIndex][3] eq $match ) {
+				$$aggregated++;
+
+				$$toPrint = ((scalar @{$buff})-1) - $$posIndex + 1;
+				push(@{$buff}, splice(@{$buff}, $$posIndex, 1));
+				$$posIndex = (scalar @{$buff})-1;
+
+				$self->updateIndices();
+
+				$buff->[(scalar @{$buff})-1][0]=$line;
+				$buff->[(scalar @{$buff})-1][1]++;
+			} else {
+				$$toPrint = 0;
+
+				push(@{$buff}, [$line, 0, $$curFile, $match]);
+				$$posIndex = (scalar @{$buff})-1;
+
+				$buff->[$$posIndex][3] = $match;
+			}
+		} else {
+			$$toPrint = 0;
+
+			push(@{$buff}, [$line, 0, $$curFile]);
+			$$posIndex = (scalar @{$buff})-1;
+		}
 	}
 }
 
-sub updateIndices () {
-	our ($TO_PRINT, @BUFFER, $LAST_POS_INDEX);
-	print STDERR "from " . ($TO_PRINT-1) . " to 0\n";
-	for ( my $linenum=$TO_PRINT-1; $linenum >= 0; $linenum-- ) {
-		print STDERR "Changing LAST_POS_INDEX for file " . $BUFFER[$#BUFFER-$linenum][2] . " to " . ($#BUFFER-$linenum) ."\n";
-		$LAST_POS_INDEX->{$BUFFER[$#BUFFER-$linenum][2]} = $#BUFFER-$linenum;
-	}
-}
+#########################
+#   HELPER FUNCTIONS    #
+#########################
 
 #########################
 #         INIT          #
 #########################
 
-$SIG{INT} = sub { print "\e[?1049l" };
-
 $|=1;
 
-our $OMMIT_GROUPS = [  ];
+my $buffCon = BufferControl->new($REG, $OMMIT_GROUPS);
+my $termCon = TerminalControl->new($buffCon);
 
-compileRegs();
-
-our @BUFFER;
-our $LAST_POS_INDEX = {};
-our $CUR_FILE;
-
-our $TO_PRINT;
-
-our $COUNT = 0;
-our $AGGREGATED = 0;
-our $SKIPPED = 0;
+$SIG{INT} = sub { $termCon->endAlternate(); };
 
 #########################
 #         MAIN          #
 #########################
 
-print "\e[?1049h";
+$termCon->startAlternate();
 
 while (my $line = readline(*STDIN) ) {
-	proccessLine($line);
-	printLines();
+	$buffCon->proccessLine($line);
+	$termCon->output();
 }
 
-print "\e[?1049l";
+$termCon->endAlternate();
