@@ -451,6 +451,8 @@ our $OMMIT_GROUPS = [  ];
 #   HELPER FUNCTIONS    #
 #########################
 
+sub end { our $termCon; $termCon->endAlternate(); exit; };
+
 #########################
 #         INIT          #
 #########################
@@ -458,12 +460,12 @@ our $OMMIT_GROUPS = [  ];
 $|=1;
 
 my $buffCon = BufferControl->new($REG, $OMMIT_GROUPS);
-my $termCon = TerminalControl->new($buffCon);
+our $termCon = TerminalControl->new($buffCon);
 
 my $in = Stream->new(*STDIN);
 my $term = Stream->new("/dev/tty", 1);
 
-$SIG{INT} = sub { $termCon->endAlternate(); exit; };
+$SIG{INT} = \&end;
 
 #########################
 #         MAIN          #
@@ -473,7 +475,7 @@ $termCon->startAlternate();
 
 while (1) {
 	if ($term->readChar()) {
-		print STDERR "KB event: " . $term->getData() . "\n";
+		end() if ( $term->getData() == 'q' );
 	}
 
 	if ( $in->readLine ) {
