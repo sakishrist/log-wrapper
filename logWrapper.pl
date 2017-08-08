@@ -3,6 +3,7 @@
 use 5.010;
 use strict;
 use warnings;
+use Time::HiRes qw( usleep );
 
 #use Data::Dumper;
 
@@ -34,6 +35,7 @@ our $OMMIT_GROUPS = [  ];
 	use 5.010;
 	use strict;
 	use warnings;
+	use Term::ReadKey;
 
 	require 'sys/ioctl.ph';
 
@@ -56,7 +58,7 @@ our $OMMIT_GROUPS = [  ];
 	}
 
 	sub startAlternate { print "\e[?1049h"; }
-	sub endAlternate { print "\e[?1049l"; }
+	sub endAlternate { print "\e[?1049l"; ReadMode ( 0, *STDOUT ); }
 
 	sub getwinsize {
 		my $winsize = ""; # Silence warning
@@ -186,12 +188,10 @@ our $OMMIT_GROUPS = [  ];
 		             'lastPosIndex' => {},
 		             'reg' => $reg,
 		             'omit' => $omit,
-		             'stdin' => IO::Select->new(),
 		           };
 
 		bless $self, $class;
 
-		$self->{stdin}->add(\*STDIN);
 		$self->compileRegs();
 
 		return $self;
@@ -352,15 +352,98 @@ our $OMMIT_GROUPS = [  ];
 		}
 	}
 
+}
+
+# Package: Stream
+{
+	package Stream;
+
+	use 5.010;
+	use strict;
+	use warnings;
+	use IO::Select;
+	use Term::ReadKey;
+
+	sub new {
+		my $class = shift;
+		my $thing = shift;
+		my $cbreak = shift;
+		$cbreak = 0 if ! ( defined($cbreak) );
+
+		my $self = {
+		             'data' => '',
+		             'file' => '',
+		             'cbreak' => $cbreak,
+		             'select' => IO::Select->new(),
+		           };
+
+		bless $self, $class;
+
+		my $fd;
+
+		if ( ref(\$thing) eq 'GLOB' ) {
+			$self->{fd} = $thing;
+			$fd = $thing;
+		} else {
+			open $fd, "<", $thing or die;
+		}
+
+		ReadMode ( 3, *$fd ) if ($cbreak);
+		$self->{fd} = $fd;
+		$self->{select}->add(\*$fd);
+		$self->{isopen} = 1;
+
+		return $self;
+	}
+
 	sub readLine() {
 		my $self = shift;
 
-		if ( $self->{stdin}->can_read(1) ) {
-			my $line;
-			return 0 if ! ( defined ($line = readline(*STDIN)) );
-			$self->proccessLine($line);
-			return 1;
+		my $fd = $self->{fd};
+
+		if ( $self->{select}->can_read(0) ) {
+			# I should be able to read ...
+			if ( defined (my $d = readline(*$fd)) ) {
+				# I just read ...
+				$self->{data} .= $d;
+				return 1;
+			} else {
+				$self->{isopen} = 0;
+			}
 		}
+
+		# Apparently no data is waiting to be read
+		return 0;
+	}
+
+	sub readChar() {
+		my $self = shift;
+
+		my $fd = $self->{fd};
+		#ReadMode ( 3, *$fd ) if ($self->{cbreak});
+		while ( $self->{select}->can_read(0) ) {
+			# I should be able to read ...
+			my $d;
+			if ( sysread(*$fd, $d, 1024) ) {
+				# I just read ...
+				$self->{data} = $d;
+				return 1;
+			} else {
+				# Oops ... it seems it's closed
+				$self->{isopen} = 0;
+			}
+		}
+
+		# Apparently no data is waiting to be read
+		return 0;
+	}
+
+	sub getData() {
+		my $self = shift;
+
+		my $data = $self->{data};
+		$self->{data} = '';
+		return $data;
 	}
 }
 
@@ -377,7 +460,10 @@ $|=1;
 my $buffCon = BufferControl->new($REG, $OMMIT_GROUPS);
 my $termCon = TerminalControl->new($buffCon);
 
-$SIG{INT} = sub { $termCon->endAlternate(); };
+my $in = Stream->new(*STDIN);
+my $term = Stream->new("/dev/tty", 1);
+
+$SIG{INT} = sub { $termCon->endAlternate(); exit; };
 
 #########################
 #         MAIN          #
@@ -386,8 +472,15 @@ $SIG{INT} = sub { $termCon->endAlternate(); };
 $termCon->startAlternate();
 
 while (1) {
-	$buffCon->readLine() or last;
-	$termCon->output();
+	if ($term->readChar()) {
+		print STDERR "KB event: " . $term->getData() . "\n";
+	}
+
+	if ( $in->readLine ) {
+		$buffCon->proccessLine($in->getData());
+		$termCon->output();
+	}
+	usleep(100);
 }
 
 $termCon->endAlternate();
