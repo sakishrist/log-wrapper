@@ -11,9 +11,16 @@ use Time::HiRes qw( usleep );
 #        CONFIG         #
 #########################
 
+# This is the regex configuration
 our $REG = {
+	# Regex rules can be specified for specific files depending on their names.
 	"stats" => {
+
+		# This is a regex to match the filename
 		"filename" => "file",
+
+		# Regexes can be groupped together. This enables the aggregation into separate
+		# lines if they are from different groups.
 		"reg_groups" => {
 			"inactive" => [
 				'file',
@@ -22,13 +29,17 @@ our $REG = {
 	},
 };
 
+# Any reg_groups from above that are found in this array will be skipped entierly
 our $OMMIT_GROUPS = [  ];
 
 #########################
 #       PACKAGES        #
 #########################
 
-# Package: termControl
+# Package: TerminalControl
+#   This package provides the means to construct the data to be output to the
+#   terminal, including the text itself and the required control sequences (
+#   cursor movement, clearing lines, etc)
 {
 	package TerminalControl;
 
@@ -39,16 +50,22 @@ our $OMMIT_GROUPS = [  ];
 
 	require 'sys/ioctl.ph';
 
-	# SAVE = \e[s
-	# RESTORE = \e[u
-	# SET POSITION = \e[1;1H
-	# CLEAR LINE = \e[K
+	# The following are the control sequences used here
+	#   SAVE CURSOR POS           = \e[s
+	#   RESTORE CURSOR POS        = \e[u
+	#   SET POSITION              = \e[1;1H
+	#   CLEAR TO THE END OF LINE  = \e[K
+	#   ALTERNATE SCREEN          = \e[?1049h
+	#   EXIT ALTERNATE SCREEN     = \e[?1049l
+	#   REVERSE LINE FEED =       = \eM
 
 	sub new ($) {
 		my $class = shift;
 		my $buffCon = shift;
-		my $self = { 'buffCon' => $buffCon,
-		             'chars' => '', };
+
+		my $self = { 'buffCon' => $buffCon, # Used to store a BufferControler object
+		             'chars' => '', # The character buffer used for preparation before printing
+		           };
 
 		bless $self, $class;
 
@@ -57,12 +74,23 @@ our $OMMIT_GROUPS = [  ];
 		return $self;
 	}
 
-	sub startAlternate { print "\e[?1049h"; }
-	sub endAlternate { print "\e[?1049l"; ReadMode ( 0, *STDOUT ); }
+	sub startAlternate {
+		# Enter the alternate screen mode
+		print "\e[?1049h";
+	}
+
+	sub endAlternate {
+		# Exit the alternate screen
+		print "\e[?1049l";
+
+		# Reset the NOECHO that was set earlier
+		ReadMode ( 0, *STDOUT );
+	}
 
 	sub getwinsize {
-		my $winsize = ""; # Silence warning
+		my $winsize = "";
 		if (ioctl(STDOUT, TIOCGWINSZ() , $winsize)) {
+			# Provide the size of the terminal, both in chars and pixels: (rows, cols, pixelsX, pixlesY)
 			return unpack 'S4', $winsize;
 		}
 	}
@@ -87,6 +115,7 @@ our $OMMIT_GROUPS = [  ];
 
 		my $chars = \$self->{chars};
 
+		# If a provided value is negative, start counting from the end with -1 being the last line/char
 		$r = $self->{rows} + $r +1 if ($r < 0);
 		$c = $self->{cols} + $c +1 if ($c < 0);
 
