@@ -352,6 +352,15 @@ our $OMMIT_GROUPS = [  ];
 		}
 	}
 
+	sub addSeparator () {
+		my $self = shift;
+
+		my $buff = $self->{buff};
+		my $toPrint = \$self->{toPrint};
+
+		$$toPrint = 0;
+		push(@{$buff}, ["", 0, ""]);
+	}
 }
 
 # Package: Stream
@@ -475,7 +484,12 @@ $termCon->startAlternate();
 
 while (1) {
 	if ($term->readChar()) {
-		end() if ( $term->getData() == 'q' );
+		my $seq = $term->getData();
+		end() if ( $seq eq 'q' );
+		if ( $seq eq "\n" ) {
+			$buffCon->addSeparator();
+			$termCon->output();
+		}
 	}
 
 	if ( $in->readLine ) {
