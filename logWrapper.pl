@@ -126,23 +126,26 @@ our $OMMIT_GROUPS = [  ];
 		my $self = shift;
 
 		my $buff = $self->{buffCon}->{buff};
-		my $toPrint = \$self->{buffCon}->{toPrint};
+		my $procFrom = \$self->{buffCon}->{procFrom};
+		my $procedTo = \$self->{buffCon}->{procedTo};
 
-		if ($$toPrint == 0 || $$toPrint > $self->{rows}-2) {
-			$self->mvCur(-1, -1);
-			$self->nl();
-			$self->addLine((scalar @{$buff})-1);
-		} elsif ($$toPrint > 0) {
-			# FIXME I might have messed up the math here
-			mvCur(-1 - $$toPrint, -1);
-			for ( my $linenum=$$toPrint-1; $linenum >= 0; $linenum-- ) {
-				$self->nl();
-				$self->addLine(((scalar @{$buff})-1)-$linenum);
+		if (defined $$procFrom) {
+			$$procFrom = $$procedTo - $self->{rows} + 2 if ($$procedTo - $$procFrom +2 > $self->{rows});
+			for (my $linenum = $$procFrom; $linenum <= $$procedTo; $linenum++) {
+				$self->mvCur($linenum-$$procedTo-1, 0);
+				$self->addLine($linenum);
 				$self->clrLine();
 			}
-		} else {
-			return;
 		}
+
+		for (my $linenum = $$procedTo + 1; $linenum <= (scalar @{$buff})-1; $linenum++) {
+			$self->mvCur(-1, 0);
+			$self->nl();
+			$self->addLine($linenum);
+		}
+
+		$$procFrom = undef;
+		$$procedTo = (scalar @{$buff})-1;
 	}
 
 	sub output {
@@ -183,7 +186,8 @@ our $OMMIT_GROUPS = [  ];
 		             'count' => 0,
 		             'skipped' => 0,
 		             'aggregated' => 0,
-		             'toPrint' => 0,
+		             'procFrom' => undef,
+		             'procedTo' => -1,
 		             'curFile' => '',
 		             'lastPosIndex' => {},
 		             'reg' => $reg,
@@ -241,11 +245,11 @@ our $OMMIT_GROUPS = [  ];
 		my $self = shift;
 
 		my $buff = $self->{buff};
-		my $toPrint = \$self->{toPrint};
+		my $procFrom = \$self->{procFrom};
 		my $lastPosIndex = $self->{lastPosIndex};
 
-		for ( my $linenum=$$toPrint-1; $linenum >= 0; $linenum-- ) {
-			$lastPosIndex->{$buff->[(scalar @{$buff})-$linenum-1][2]} = (scalar @{$buff})-$linenum-1;
+		for ( my $linenum=$procFrom; $linenum <= (scalar @{$buff})-1; $linenum++ ) {
+			$lastPosIndex->{$buff->[$linenum][2]} = (scalar @{$buff})-$linenum-1;
 		}
 	}
 
@@ -297,15 +301,13 @@ our $OMMIT_GROUPS = [  ];
 		my $curFile = \$self->{curFile};
 		my $buff = $self->{buff};
 		my $count = \$self->{count};
-		my $toPrint = \$self->{toPrint};
+		my $procFrom = \$self->{procFrom};
 		my $skipped = \$self->{skipped};
 		my $aggregated = \$self->{aggregated};
 		my $posIndex = \$self->{lastPosIndex}->{$$curFile};
 
-
 		chomp( $line );
 
-		$$toPrint = -1;
 		# IGNORE EMPTY LINES
 		return if ($line =~ '^$');
 
@@ -328,7 +330,7 @@ our $OMMIT_GROUPS = [  ];
 			if ( defined $$posIndex && defined $buff->[$$posIndex][3] && $buff->[$$posIndex][3] eq $match ) {
 				$$aggregated++;
 
-				$$toPrint = ((scalar @{$buff})-1) - $$posIndex + 1;
+				$$procFrom = $$posIndex;
 				push(@{$buff}, splice(@{$buff}, $$posIndex, 1));
 				$$posIndex = (scalar @{$buff})-1;
 
@@ -337,16 +339,12 @@ our $OMMIT_GROUPS = [  ];
 				$buff->[(scalar @{$buff})-1][0]=$line;
 				$buff->[(scalar @{$buff})-1][1]++;
 			} else {
-				$$toPrint = 0;
-
 				push(@{$buff}, [$line, 0, $$curFile, $match]);
 				$$posIndex = (scalar @{$buff})-1;
 
 				$buff->[$$posIndex][3] = $match;
 			}
 		} else {
-			$$toPrint = 0;
-
 			push(@{$buff}, [$line, 0, $$curFile]);
 			$$posIndex = (scalar @{$buff})-1;
 		}
@@ -356,9 +354,7 @@ our $OMMIT_GROUPS = [  ];
 		my $self = shift;
 
 		my $buff = $self->{buff};
-		my $toPrint = \$self->{toPrint};
 
-		$$toPrint = 0;
 		push(@{$buff}, ["", 0, ""]);
 	}
 }
