@@ -3,7 +3,9 @@
 use 5.010;
 use strict;
 use warnings;
+
 use Time::HiRes qw( usleep );
+use Switch;
 
 use TerminalControl;
 use BufferControl;
@@ -64,17 +66,15 @@ $termCon->startAlternate();
 
 while (1) {
 	if ($term->readChar()) {
-		my $seq = $term->getData();
-		end() if ( $seq eq 'q' );
-		if ( $seq eq "\n" ) {
-			$buffCon->addSeparator();
-			$termCon->output();
-		}
-		if ( $seq eq "w" ) {
-			$termCon->scroll(-1);
-		}
-		if ( $seq eq "s" ) {
-			$termCon->scroll(1);
+		my $opt = $term->getData();
+		switch ($opt) {
+			case 'q'  { end() }
+			case "\n" { $buffCon->addSeparator(); $termCon->output(); }
+			case "\e[A"  { $termCon->scroll(-1) }
+			case "\e[B"  { $termCon->scroll(1); }
+			case "\e[5~"  { $termCon->scroll(-10); }
+			case "\e[6~"  { $termCon->scroll(10); }
+			case "\eOF"  { $termCon->scroll(); }
 		}
 	}
 

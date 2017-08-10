@@ -192,7 +192,7 @@ sub constructLines () {
 	$$endPos = $$newEndPos;
 }
 
-sub scroll ($) {
+sub scroll {
 	my $self = shift;
 	my $diff = shift;
 
@@ -203,7 +203,7 @@ sub scroll ($) {
 
 	$self->{changed} = 1;
 
-	if (($$newEndPos + $diff) > ((scalar @{$buff})-1)) {
+	if ( (! defined $diff) || ( ($$newEndPos + $diff) > ((scalar @{$buff})-1) ) ) {
 		$$newEndPos = (scalar @{$buff})-1;
 	} elsif (($$newEndPos + $diff) < 0) {
 		$$newEndPos = 0;
