@@ -36,7 +36,7 @@ sub new ($) {
 
 	bless $self, $class;
 
-	($self->{rows}, $self->{cols}) = $self->getwinsize();
+	$self->updateWinsize();
 
 	return $self;
 }
@@ -54,11 +54,13 @@ sub endAlternate {
 	ReadMode ( 0, *STDOUT );
 }
 
-sub getwinsize {
+sub updateWinsize {
+	my $self = shift;
+
 	my $winsize = "";
 	if (ioctl(STDOUT, TIOCGWINSZ() , $winsize)) {
 		# Provide the size of the terminal, both in chars and pixels: (rows, cols, pixelsX, pixlesY)
-		return unpack 'S4', $winsize;
+		($self->{rows}, $self->{cols}) = unpack 'S4', $winsize;
 	}
 }
 
@@ -67,6 +69,13 @@ sub clrLine {
 	my $chars = \$self->{chars};
 
 	$$chars .= "\e[K";
+}
+
+sub cls {
+	my $self = shift;
+	my $chars = \$self->{chars};
+
+	$$chars .= "\e[2J";
 }
 
 sub nl {
@@ -127,8 +136,9 @@ sub addHeader {
 	$$chars .= "\e[1;1H\e[30;43m Printed: " . ($count-$skipped-$aggregated) . " - Skipped: $skipped - Aggregated: $aggregated\e[K\e[0m";
 }
 
-sub constructLines () {
+sub constructLines {
 	my $self = shift;
+	my $refresh = shift;
 
 	my $buff = $self->{buffCon}->{buff};
 	my $updatesStart = \$self->{buffCon}->{updatesStart};
@@ -137,6 +147,12 @@ sub constructLines () {
 	my $follow = \$self->{follow};
 
 	$$newEndPos = (scalar @{$buff})-1 if ($$follow == 1);
+
+	if ($refresh == 1) {
+		$self->cls();
+		$$endPos = -1;
+	}
+
 	# While newEndPos is smaller than the current endPos
 	#   Start from FirstInvisibleLineBefore to LastLineToPrint
 	#
@@ -221,10 +237,10 @@ sub scroll {
 
 sub output {
 	my $self = shift;
+	my $refresh = shift;
 
-
-	if ($self->{changed} || $self->{buffCon}->{changed}) {
-		$self->constructLines();
+	if ($self->{changed} || $self->{buffCon}->{changed} || $refresh == 1 ) {
+		$self->constructLines($refresh);
 		$self->addHeader();
 
 		$self->print();

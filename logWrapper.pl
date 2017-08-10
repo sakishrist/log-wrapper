@@ -42,13 +42,28 @@ our $OMMIT_GROUPS = [  ];
 #   HELPER FUNCTIONS    #
 #########################
 
-sub end { our $termCon; $termCon->endAlternate(); exit; };
+sub end {
+	our $termCon;
+
+	$termCon->endAlternate();
+	exit;
+}
+
+sub terminalUpdated {
+	our $termCon;
+	our $refresh;
+
+	$termCon->updateWinsize();
+	$refresh = 1;
+}
 
 #########################
 #         INIT          #
 #########################
 
 $|=1;
+
+our $refresh = 0;
 
 my $buffCon = BufferControl->new($REG, $OMMIT_GROUPS);
 our $termCon = TerminalControl->new($buffCon);
@@ -57,6 +72,7 @@ my $in = Stream->new(*STDIN);
 my $term = Stream->new("/dev/tty", 1);
 
 $SIG{INT} = \&end;
+$SIG{WINCH} = \&terminalUpdated;
 
 #########################
 #         MAIN          #
@@ -70,7 +86,7 @@ while (1) {
 		switch ($opt) {
 			case 'q'  { end() }
 			case "\n" { $buffCon->addSeparator(); $termCon->output(); }
-			case "\e[A"  { $termCon->scroll(-1) }
+			case "\e[A"  { $termCon->scroll(-1); }
 			case "\e[B"  { $termCon->scroll(1); }
 			case "\e[5~"  { $termCon->scroll(-10); }
 			case "\e[6~"  { $termCon->scroll(10); }
@@ -81,7 +97,8 @@ while (1) {
 	if ( $in->readLine ) {
 		$buffCon->proccessLine($in->getData());
 	}
-	$termCon->output();
+	$termCon->output($refresh);
+	$refresh = 0;
 	usleep(100);
 }
 
