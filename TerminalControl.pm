@@ -1,0 +1,244 @@
+package TerminalControl;
+
+use 5.010;
+use strict;
+use warnings;
+use Term::ReadKey;
+
+require 'sys/ioctl.ph';
+
+# Package: TerminalControl
+#   This package provides the means to construct the data to be output to the
+#   terminal, including the text itself and the required control sequences (
+#   cursor movement, clearing lines, etc)
+
+
+# The following are the control sequences used here
+#   SAVE CURSOR POS           = \e[s
+#   RESTORE CURSOR POS        = \e[u
+#   SET POSITION              = \e[1;1H
+#   CLEAR TO THE END OF LINE  = \e[K
+#   ALTERNATE SCREEN          = \e[?1049h
+#   EXIT ALTERNATE SCREEN     = \e[?1049l
+#   REVERSE LINE FEED =       = \eM
+
+sub new ($) {
+	my $class = shift;
+	my $buffCon = shift;
+
+	my $self = { 'buffCon' => $buffCon, # Used to store a BufferControler object
+							 'chars' => '', # The character buffer used for preparation before printing
+							 'follow' => 1,
+							 'endPos' => -1,
+							 'changed' => 0,
+							 'newEndPos' => -1,
+						 };
+
+	bless $self, $class;
+
+	($self->{rows}, $self->{cols}) = $self->getwinsize();
+
+	return $self;
+}
+
+sub startAlternate {
+	# Enter the alternate screen mode
+	print "\e[?1049h";
+}
+
+sub endAlternate {
+	# Exit the alternate screen
+	print "\e[?1049l";
+
+	# Reset the NOECHO that was set earlier
+	ReadMode ( 0, *STDOUT );
+}
+
+sub getwinsize {
+	my $winsize = "";
+	if (ioctl(STDOUT, TIOCGWINSZ() , $winsize)) {
+		# Provide the size of the terminal, both in chars and pixels: (rows, cols, pixelsX, pixlesY)
+		return unpack 'S4', $winsize;
+	}
+}
+
+sub clrLine {
+	my $self = shift;
+	my $chars = \$self->{chars};
+
+	$$chars .= "\e[K";
+}
+
+sub nl {
+	my $self = shift;
+	my $chars = \$self->{chars};
+
+	$$chars .= "\n";
+}
+
+sub revNl {
+	my $self = shift;
+	my $chars = \$self->{chars};
+
+	$$chars .= "\eM";
+}
+
+sub mvCur ($$) {
+	my $self = shift;
+	my ($r,$c) = @_;
+
+	my $chars = \$self->{chars};
+
+	# If a provided value is negative, start counting from the end with -1 being the last line/char
+	$r = $self->{rows} + $r +1 if ($r < 0);
+	$c = $self->{cols} + $c +1 if ($c < 0);
+
+	$$chars .= "\e[".$r.";".$c."H";
+}
+
+sub addLine ($) {
+	my $self = shift;
+	my $linenum = shift;
+
+	return if ($linenum < 0 || $linenum > (scalar @{$self->{buffCon}->{buff}})-1);
+
+	my $chars = \$self->{chars};
+	my $line = $self->{buffCon}->{buff}->[$linenum];
+
+	if (length($line->[2]) <= 30) {
+		$$chars .= " " . sprintf ( "%-30s", $line->[2]);
+	} else {
+		$$chars .= " ..." . substr ( $line->[2], -27 );
+	}
+
+	$$chars .= " | " . $line->[0];
+	$$chars .= " \e[1m(" . ($line->[1]+1) . ")\e[0m" if $line->[1];
+}
+
+sub addHeader {
+	my $self = shift;
+
+	my $count = $self->{buffCon}->{count};
+	my $skipped = $self->{buffCon}->{skipped};
+	my $aggregated = $self->{buffCon}->{aggregated};
+
+	my $chars = \$self->{chars};
+
+	$$chars .= "\e[1;1H\e[30;43m Printed: " . ($count-$skipped-$aggregated) . " - Skipped: $skipped - Aggregated: $aggregated\e[K\e[0m";
+}
+
+sub constructLines () {
+	my $self = shift;
+
+	my $buff = $self->{buffCon}->{buff};
+	my $updatesStart = \$self->{buffCon}->{updatesStart};
+	my $endPos = \$self->{endPos};
+	my $newEndPos = \$self->{newEndPos};
+	my $follow = \$self->{follow};
+
+	$$newEndPos = (scalar @{$buff})-1 if ($$follow == 1);
+	# While newEndPos is smaller than the current endPos
+	#   Start from FirstInvisibleLineBefore to LastLineToPrint
+	#
+	#   FirstInvisibleLineBefore = FirstVisibleLine -1
+	#   FirstVisibleLine = LastVisibleLine - (rows + 2)
+	#   LastVisibleLine = endPos
+	#     SO: FirstInvisibleLineBefore = endPos - rows + 1
+	#
+	#   LastLineToPrint = FirstVisibleLine - DiffBetweenPositions
+	#   DiffBetweenPositions = endPos - newEndPos
+	#     SO: LastLineToPrint = newEndPos - rows + 2
+	for (my $linenum = $$endPos + 1 - $self->{rows}; $linenum >= $$newEndPos - $self->{rows} +2; $linenum--) {
+		$self->mvCur(1, 0);
+		$self->revNl();
+		$self->mvCur(2, 0);
+		$self->addLine($linenum);
+		$self->clrLine();
+	}
+
+	# While newEndPos is greater than the current endPos
+	#   Start from FirstInvisibleLineAfter to LastLineToPrint
+	#
+	#   FirstInvisibleLineAfter = FirstVisibleLine +1
+	#   FirstVisibleLine = endPos
+	#     SO: FirstInvisibleLineAfter = endPos + 1
+	#
+	#     SO: LastLineToPrint =  newEndPos
+	for (my $linenum = $$endPos + 1; $linenum <= $$newEndPos; $linenum++) {
+		$self->mvCur(-1, 0);
+		$self->nl();
+		$self->addLine($linenum);
+		$self->clrLine();
+	}
+
+	if (defined $$updatesStart) {
+
+		# If ProcFrom is above FirstVisibleLine
+		#   ProcFrom = FirstVisibleLine
+		#   FirstVisibleLine = LastVisibleLine - (rows + 2)
+		#     !! +2 because LastVisibleLine - rows = line 0
+		#     !! and line 0 is the first non-visible line before the point where the terminal starts
+		#   LastVisibleLine = newEndPos
+		$$updatesStart = $$newEndPos - $self->{rows} + 2  if ( $$updatesStart < -$self->{rows} + $$newEndPos +2);
+		for (my $linenum = $$updatesStart; $linenum <= $$newEndPos; $linenum++) {
+			$self->mvCur($linenum-$$newEndPos-1, 0);
+			$self->addLine($linenum);
+			$self->clrLine();
+		}
+	}
+
+
+	$$updatesStart = undef;
+	$$endPos = $$newEndPos;
+}
+
+sub scroll ($) {
+	my $self = shift;
+	my $diff = shift;
+
+
+	my $buff = $self->{buffCon}->{buff};
+	my $newEndPos = \$self->{newEndPos};
+	my $follow = \$self->{follow};
+
+	$self->{changed} = 1;
+
+	if (($$newEndPos + $diff) > ((scalar @{$buff})-1)) {
+		$$newEndPos = (scalar @{$buff})-1;
+	} elsif (($$newEndPos + $diff) < 0) {
+		$$newEndPos = 0;
+	} else {
+		$$newEndPos += $diff;
+	}
+
+	if ($$newEndPos == (scalar @{$buff})-1) {
+		$$follow = 1;
+	} else {
+		$$follow = 0;
+	}
+
+}
+
+sub output {
+	my $self = shift;
+
+
+	if ($self->{changed} || $self->{buffCon}->{changed}) {
+		$self->constructLines();
+		$self->addHeader();
+
+		$self->print();
+		$self->{changed} = 0;
+		$self->{buffCon}->{changed} = 0;
+	}
+}
+
+sub print {
+	my $self = shift;
+
+	my $chars = \$self->{chars};
+	print $$chars;
+	$$chars = '';
+}
+
+1;
