@@ -65,6 +65,10 @@ our $OMMIT_GROUPS = [  ];
 
 		my $self = { 'buffCon' => $buffCon, # Used to store a BufferControler object
 		             'chars' => '', # The character buffer used for preparation before printing
+		             'follow' => 1,
+		             'endPos' => -1,
+		             'changed' => 0,
+		             'newEndPos' => -1,
 		           };
 
 		bless $self, $class;
@@ -109,6 +113,13 @@ our $OMMIT_GROUPS = [  ];
 		$$chars .= "\n";
 	}
 
+	sub revNl {
+		my $self = shift;
+		my $chars = \$self->{chars};
+
+		$$chars .= "\eM";
+	}
+
 	sub mvCur ($$) {
 		my $self = shift;
 		my ($r,$c) = @_;
@@ -125,6 +136,8 @@ our $OMMIT_GROUPS = [  ];
 	sub addLine ($) {
 		my $self = shift;
 		my $linenum = shift;
+
+		return if ($linenum < 0 || $linenum > (scalar @{$self->{buffCon}->{buff}})-1);
 
 		my $chars = \$self->{chars};
 		my $line = $self->{buffCon}->{buff}->[$linenum];
@@ -155,35 +168,106 @@ our $OMMIT_GROUPS = [  ];
 		my $self = shift;
 
 		my $buff = $self->{buffCon}->{buff};
-		my $procFrom = \$self->{buffCon}->{procFrom};
-		my $procedTo = \$self->{buffCon}->{procedTo};
+		my $updatesStart = \$self->{buffCon}->{updatesStart};
+		my $endPos = \$self->{endPos};
+		my $newEndPos = \$self->{newEndPos};
+		my $follow = \$self->{follow};
 
-		if (defined $$procFrom) {
-			$$procFrom = $$procedTo - $self->{rows} + 2 if ($$procedTo - $$procFrom +2 > $self->{rows});
-			for (my $linenum = $$procFrom; $linenum <= $$procedTo; $linenum++) {
-				$self->mvCur($linenum-$$procedTo-1, 0);
+		$$newEndPos = (scalar @{$buff})-1 if ($$follow == 1);
+		# While newEndPos is smaller than the current endPos
+		#   Start from FirstInvisibleLineBefore to LastLineToPrint
+		#
+		#   FirstInvisibleLineBefore = FirstVisibleLine -1
+		#   FirstVisibleLine = LastVisibleLine - (rows + 2)
+		#   LastVisibleLine = endPos
+		#     SO: FirstInvisibleLineBefore = endPos - rows + 1
+		#
+		#   LastLineToPrint = FirstVisibleLine - DiffBetweenPositions
+		#   DiffBetweenPositions = endPos - newEndPos
+		#     SO: LastLineToPrint = newEndPos - rows + 2
+		for (my $linenum = $$endPos + 1 - $self->{rows}; $linenum >= $$newEndPos - $self->{rows} +2; $linenum--) {
+			$self->mvCur(1, 0);
+			$self->revNl();
+			$self->mvCur(2, 0);
+			$self->addLine($linenum);
+			$self->clrLine();
+		}
+
+		# While newEndPos is greater than the current endPos
+		#   Start from FirstInvisibleLineAfter to LastLineToPrint
+		#
+		#   FirstInvisibleLineAfter = FirstVisibleLine +1
+		#   FirstVisibleLine = endPos
+		#     SO: FirstInvisibleLineAfter = endPos + 1
+		#
+		#     SO: LastLineToPrint =  newEndPos
+		for (my $linenum = $$endPos + 1; $linenum <= $$newEndPos; $linenum++) {
+			$self->mvCur(-1, 0);
+			$self->nl();
+			$self->addLine($linenum);
+			$self->clrLine();
+		}
+
+		if (defined $$updatesStart) {
+
+			# If ProcFrom is above FirstVisibleLine
+			#   ProcFrom = FirstVisibleLine
+			#   FirstVisibleLine = LastVisibleLine - (rows + 2)
+			#     !! +2 because LastVisibleLine - rows = line 0
+			#     !! and line 0 is the first non-visible line before the point where the terminal starts
+			#   LastVisibleLine = newEndPos
+			$$updatesStart = $$newEndPos - $self->{rows} + 2  if ( $$updatesStart < -$self->{rows} + $$newEndPos +2);
+			for (my $linenum = $$updatesStart; $linenum <= $$newEndPos; $linenum++) {
+				$self->mvCur($linenum-$$newEndPos-1, 0);
 				$self->addLine($linenum);
 				$self->clrLine();
 			}
 		}
 
-		for (my $linenum = $$procedTo + 1; $linenum <= (scalar @{$buff})-1; $linenum++) {
-			$self->mvCur(-1, 0);
-			$self->nl();
-			$self->addLine($linenum);
+
+		$$updatesStart = undef;
+		$$endPos = $$newEndPos;
+	}
+
+	sub scroll ($) {
+		my $self = shift;
+		my $diff = shift;
+
+
+		my $buff = $self->{buffCon}->{buff};
+		my $newEndPos = \$self->{newEndPos};
+		my $follow = \$self->{follow};
+
+		$self->{changed} = 1;
+
+		if (($$newEndPos + $diff) > ((scalar @{$buff})-1)) {
+			$$newEndPos = (scalar @{$buff})-1;
+		} elsif (($$newEndPos + $diff) < 0) {
+			$$newEndPos = 0;
+		} else {
+			$$newEndPos += $diff;
 		}
 
-		$$procFrom = undef;
-		$$procedTo = (scalar @{$buff})-1;
+		if ($$newEndPos == (scalar @{$buff})-1) {
+			$$follow = 1;
+		} else {
+			$$follow = 0;
+		}
+
 	}
 
 	sub output {
 		my $self = shift;
 
-		$self->constructLines();
-		$self->addHeader();
 
-		$self->print();
+		if ($self->{changed} || $self->{buffCon}->{changed}) {
+			$self->constructLines();
+			$self->addHeader();
+
+			$self->print();
+			$self->{changed} = 0;
+			$self->{buffCon}->{changed} = 0;
+		}
 	}
 
 	sub print {
@@ -215,8 +299,8 @@ our $OMMIT_GROUPS = [  ];
 		             'count' => 0,
 		             'skipped' => 0,
 		             'aggregated' => 0,
-		             'procFrom' => undef,
-		             'procedTo' => -1,
+		             'changed' => 0,
+		             'updatesStart' => undef,
 		             'curFile' => '',
 		             'lastPosIndex' => {},
 		             'reg' => $reg,
@@ -274,10 +358,10 @@ our $OMMIT_GROUPS = [  ];
 		my $self = shift;
 
 		my $buff = $self->{buff};
-		my $procFrom = \$self->{procFrom};
+		my $updatesStart = \$self->{updatesStart};
 		my $lastPosIndex = $self->{lastPosIndex};
 
-		for ( my $linenum=$procFrom; $linenum <= (scalar @{$buff})-1; $linenum++ ) {
+		for ( my $linenum=$updatesStart; $linenum <= (scalar @{$buff})-1; $linenum++ ) {
 			$lastPosIndex->{$buff->[$linenum][2]} = (scalar @{$buff})-$linenum-1;
 		}
 	}
@@ -330,15 +414,18 @@ our $OMMIT_GROUPS = [  ];
 		my $curFile = \$self->{curFile};
 		my $buff = $self->{buff};
 		my $count = \$self->{count};
-		my $procFrom = \$self->{procFrom};
+		my $updatesStart = \$self->{updatesStart};
 		my $skipped = \$self->{skipped};
 		my $aggregated = \$self->{aggregated};
 		my $posIndex = \$self->{lastPosIndex}->{$$curFile};
+
 
 		chomp( $line );
 
 		# IGNORE EMPTY LINES
 		return if ($line =~ '^$');
+
+		$self->{changed} = 1;
 
 		# MATCH TAIL FILENAME LINES
 		if (my $f = $self->matchTailFilename($line)) {
@@ -359,7 +446,7 @@ our $OMMIT_GROUPS = [  ];
 			if ( defined $$posIndex && defined $buff->[$$posIndex][3] && $buff->[$$posIndex][3] eq $match ) {
 				$$aggregated++;
 
-				$$procFrom = $$posIndex;
+				$$updatesStart = $$posIndex;
 				push(@{$buff}, splice(@{$buff}, $$posIndex, 1));
 				$$posIndex = (scalar @{$buff})-1;
 
@@ -515,12 +602,18 @@ while (1) {
 			$buffCon->addSeparator();
 			$termCon->output();
 		}
+		if ( $seq eq "w" ) {
+			$termCon->scroll(-1);
+		}
+		if ( $seq eq "s" ) {
+			$termCon->scroll(1);
+		}
 	}
 
 	if ( $in->readLine ) {
 		$buffCon->proccessLine($in->getData());
-		$termCon->output();
 	}
+	$termCon->output();
 	usleep(100);
 }
 
