@@ -58,7 +58,7 @@ sub readLine() {
 	return 0;
 }
 
-sub readChar() {
+sub read() {
 	my $self = shift;
 
 	my $fd = $self->{fd};

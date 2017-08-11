@@ -22,17 +22,46 @@ require 'sys/ioctl.ph';
 #   EXIT ALTERNATE SCREEN     = \e[?1049l
 #   REVERSE LINE FEED =       = \eM
 
-sub new ($) {
+#########################
+#         INIT          #
+#########################
+
+our $parse = {
+	"\e" => {
+		"[" => {
+			"A" => "up",
+			"B" => "down",
+			"5" => {
+				"~" => "pageUp", },
+			"6" => {
+				"~" => "pageDown", }, },
+		"O" => {
+			"F" => "end", }, },
+	"q" => "quit",
+	"\n" => "separator",
+};
+
+#########################
+#       METHODS         #
+#########################
+
+sub new ($$) {
 	my $class = shift;
 	my $buffCon = shift;
+	my $in = shift;
+	our $parse;
 
 	my $self = { 'buffCon' => $buffCon, # Used to store a BufferControler object
-							 'chars' => '', # The character buffer used for preparation before printing
-							 'follow' => 1,
-							 'endPos' => -1,
-							 'changed' => 0,
-							 'newEndPos' => -1,
-						 };
+	             'chars' => '', # The character buffer used for preparation before printing
+	             'follow' => 1,
+	             'endPos' => -1,
+	             'changed' => 0,
+	             'newEndPos' => -1,
+	             'in' => Stream->new($in, 1),
+	             'inBuff' => '',
+	             'parsePos' => $parse,
+	             'parse' => $parse,
+	           };
 
 	bless $self, $class;
 
@@ -255,6 +284,38 @@ sub print {
 	my $chars = \$self->{chars};
 	print $$chars;
 	$$chars = '';
+}
+
+sub getCommands {
+	my $self = shift;
+
+	my $inBuff = \$self->{inBuff};
+	my $parsePos = $self->{parsePos};
+	my $parse = $self->{parse};
+	my $char;
+	my $commands = [];
+
+	if ($self->{in}->read()) {
+		$$inBuff .= $self->{in}->getData();
+
+
+		while (length $$inBuff) {
+			($char, $$inBuff) = split //, $$inBuff, 2;
+
+			if (defined $parsePos->{$char}) {
+				$parsePos = $parsePos->{$char};
+				if ( ref($parsePos) eq 'HASH' ) {
+				} else {
+					push @$commands, $parsePos;
+					$parsePos = $parse;
+				}
+			} else {
+				push @$commands, "invalid";
+				$parsePos = $parse;
+			}
+		}
+	}
+	return $commands;
 }
 
 1;

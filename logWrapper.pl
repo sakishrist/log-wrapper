@@ -42,7 +42,7 @@ our $OMMIT_GROUPS = [  ];
 #   HELPER FUNCTIONS    #
 #########################
 
-sub end {
+sub quit {
 	our $termCon;
 
 	$termCon->endAlternate();
@@ -66,12 +66,11 @@ $|=1;
 our $refresh = 0;
 
 my $buffCon = BufferControl->new($REG, $OMMIT_GROUPS);
-our $termCon = TerminalControl->new($buffCon);
+our $termCon = TerminalControl->new($buffCon, "/dev/tty");
 
 my $in = Stream->new(*STDIN);
-my $term = Stream->new("/dev/tty", 1);
 
-$SIG{INT} = \&end;
+$SIG{INT} = \&quit;
 $SIG{WINCH} = \&terminalUpdated;
 
 #########################
@@ -81,16 +80,17 @@ $SIG{WINCH} = \&terminalUpdated;
 $termCon->startAlternate();
 
 while (1) {
-	if ($term->readChar()) {
-		my $opt = $term->getData();
-		switch ($opt) {
-			case 'q'  { end() }
-			case "\n" { $buffCon->addSeparator(); $termCon->output(); }
-			case "\e[A"  { $termCon->scroll(-1); }
-			case "\e[B"  { $termCon->scroll(1); }
-			case "\e[5~"  { $termCon->scroll(-10); }
-			case "\e[6~"  { $termCon->scroll(10); }
-			case "\eOF"  { $termCon->scroll(); }
+	foreach my $c (@{$termCon->getCommands()}) {
+		switch ($c) {
+			case 'quit'        { quit() }
+			case "separator"   { $buffCon->addSeparator(); }
+			case "up"          { $termCon->scroll(-1); }
+			case "down"        { $termCon->scroll(1); }
+			case "pageUp"      { $termCon->scroll(-10); }
+			case "pageDown"    { $termCon->scroll(10); }
+			case "end"         { $termCon->scroll(); }
+			case "invalid"         { print STDERR "Invalid command received\n" }
+			#print STDERR "0x$_ " for unpack "(H2)*",$opt; print STDERR "\n";
 		}
 	}
 
