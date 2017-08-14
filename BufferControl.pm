@@ -7,7 +7,8 @@ use IO::Select;
 
 sub new ($$) {
 	my $class = shift;
-	my $reg = shift;
+	my $agReg = shift;
+	my $filesReg = shift;
 	my $omit = shift;
 
 	my $self = {
@@ -19,7 +20,9 @@ sub new ($$) {
 							 'updatesStart' => undef,
 							 'curFile' => '',
 							 'lastPosIndex' => {},
-							 'reg' => $reg,
+							 'reg' => {},
+							 'agReg' => $agReg,
+							 'filesReg' => $filesReg,
 							 'omit' => $omit,
 						 };
 
@@ -48,25 +51,23 @@ sub compileRegs () {
 	my $self = shift;
 
 	my $reg = $self->{reg};
+	my $agReg = $self->{agReg};
+	my $filesReg = $self->{filesReg};
 
-	foreach my $reg_file_group (keys %{$reg}) {
-
-		foreach my $reg_group (keys %{$reg->{$reg_file_group}->{reg_groups}}) {
-			my $reg_str = '(';
-			my $first = 1;
-
-			foreach my $r ( @{ $reg->{$reg_file_group}->{reg_groups}->{$reg_group} } ) {
-				if ($first) {
-					$first=0;
-				} else {
-					$reg_str .= '|';
-				}
-
-				$reg_str .= $r;
-			}
-			$reg_str .= ")";
-			$reg->{$reg_file_group}->{reg_groups}->{$reg_group} = qr/$reg_str/;
+	foreach my $rfg (keys %{$filesReg}) {
+		my $files_str;
+		foreach my $f (  @{ $filesReg->{$rfg} }  ) {
+			$files_str .= (defined $files_str ? '|' : '') . $f;
 		}
+		$reg->{$rfg} = { 'files' => qr/($files_str)/, 'aggRegs' => {} };
+	}
+
+	foreach my $rg (keys %{$agReg}) {
+		my $reg_str;
+		foreach my $r (  @{ $agReg->{$rg}->{regs} }  ) {
+			$reg_str .= (defined $reg_str ? '|' : '') . $r;
+		}
+		$reg->{ $agReg->{$rg}->{files} }->{aggRegs}->{$rg} = qr/($reg_str)/;
 	}
 }
 
@@ -97,9 +98,9 @@ sub matchFile ($) {
 
 	my $reg = $self->{reg};
 
-	foreach my $reg_file_group (keys %{$reg}) {
-		if ( $file =~ $reg->{$reg_file_group}->{filename} ) {
-			return $reg_file_group;
+	foreach my $rfg (keys %{$reg}) {
+		if ( $file =~ $reg->{$rfg}->{files} ) {
+			return $rfg;
 		}
 	}
 }
@@ -109,16 +110,16 @@ sub matchGroup ($$) {
 	my $line = shift;
 	my $file = shift;
 
-	my $filematch;
-	if (! ( $filematch = $self->matchFile($file) )) {
+	my $filesMatch;
+	if (! ( $filesMatch = $self->matchFile($file) )) {
 		return;
 	}
 
-	my $regGroups = $self->{reg}->{$filematch}->{reg_groups};
+	my $regGroups = $self->{reg}->{$filesMatch}->{aggRegs};
 
-	foreach my $reg_group (keys %{$regGroups}) {
-		if ( $line =~ $regGroups->{$reg_group} ) {
-			return $reg_group;
+	foreach my $rg (keys %{$regGroups}) {
+		if ( $line =~ $regGroups->{$rg} ) {
+			return $rg;
 		}
 	}
 }

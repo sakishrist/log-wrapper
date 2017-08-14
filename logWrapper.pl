@@ -17,21 +17,24 @@ use Stream;
 #        CONFIG         #
 #########################
 
+our $FILE_GROUPS = {
+	# The regex that will match the filename
+	'stats' => [ '(resourceagent|clustermanager)_[0-9]*\.log' ],
+};
+
 # This is the regex configuration
-our $REG = {
-	# Regex rules can be specified for specific files depending on their names.
-	"stats" => {
+our $AGGREGATE_REG = {
+	# Name for the group that will aggregate lines
+	"Stat debugs" => {
 
-		# This is a regex to match the filename
-		"filename" => "file",
+		# This is a regex group to match the filename
+		"files" => 'stats',
 
-		# Regexes can be groupped together. This enables the aggregation into separate
-		# lines if they are from different groups.
-		"reg_groups" => {
-			"inactive" => [
-				'file',
-			],
-		}
+		# Regexes that if matched will aggregate the line into a previous one that
+		# has matched the same group.
+		"regs" => [
+			'DBG',
+		],
 	},
 };
 
@@ -65,7 +68,7 @@ $|=1;
 
 our $refresh = 0;
 
-my $buffCon = BufferControl->new($REG, $OMMIT_GROUPS);
+my $buffCon = BufferControl->new($AGGREGATE_REG, $FILE_GROUPS, $OMMIT_GROUPS);
 our $termCon = TerminalControl->new($buffCon, "/dev/tty");
 
 my $in = Stream->new(*STDIN);
