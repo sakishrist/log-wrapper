@@ -7,7 +7,7 @@ use IO::Select;
 
 sub new ($$) {
 	my $class = shift;
-	my $agReg = shift;
+	my $agRegs = shift;
 	my $filesReg = shift;
 	my $omit = shift;
 
@@ -21,7 +21,7 @@ sub new ($$) {
 							 'curFile' => '',
 							 'lastPosIndex' => {},
 							 'reg' => {},
-							 'agReg' => $agReg,
+							 'agRegs' => $agRegs,
 							 'filesReg' => $filesReg,
 							 'omit' => $omit,
 						 };
@@ -51,23 +51,23 @@ sub compileRegs () {
 	my $self = shift;
 
 	my $reg = $self->{reg};
-	my $agReg = $self->{agReg};
+	my $agRegs = $self->{agRegs};
 	my $filesReg = $self->{filesReg};
 
-	foreach my $rfg (keys %{$filesReg}) {
+	foreach my $frg (keys %{$filesReg}) {
 		my $files_str;
-		foreach my $f (  @{ $filesReg->{$rfg} }  ) {
+		foreach my $f (  @{ $filesReg->{$frg} }  ) {
 			$files_str .= (defined $files_str ? '|' : '') . $f;
 		}
-		$reg->{$rfg} = { 'files' => qr/($files_str)/, 'aggRegs' => {} };
+		$reg->{$frg} = { 'files' => qr/($files_str)/, 'aggRegs' => {} };
 	}
 
-	foreach my $rg (keys %{$agReg}) {
+	foreach my $arg (keys %{$agRegs}) {
 		my $reg_str;
-		foreach my $r (  @{ $agReg->{$rg}->{regs} }  ) {
+		foreach my $r (  @{ $agRegs->{$arg}->{regs} }  ) {
 			$reg_str .= (defined $reg_str ? '|' : '') . $r;
 		}
-		$reg->{ $agReg->{$rg}->{files} }->{aggRegs}->{$rg} = qr/($reg_str)/;
+		$reg->{ $agRegs->{$arg}->{files} }->{aggRegs}->{$arg} = qr/($reg_str)/;
 	}
 }
 
@@ -98,14 +98,14 @@ sub matchFile ($) {
 
 	my $reg = $self->{reg};
 
-	foreach my $rfg (keys %{$reg}) {
-		if ( $file =~ $reg->{$rfg}->{files} ) {
-			return $rfg;
+	foreach my $frg (keys %{$reg}) {
+		if ( $file =~ $reg->{$frg}->{files} ) {
+			return $frg;
 		}
 	}
 }
 
-sub matchGroup ($$) {
+sub matchAggGroup ($$) {
 	my $self = shift;
 	my $line = shift;
 	my $file = shift;
@@ -117,9 +117,9 @@ sub matchGroup ($$) {
 
 	my $regGroups = $self->{reg}->{$filesMatch}->{aggRegs};
 
-	foreach my $rg (keys %{$regGroups}) {
-		if ( $line =~ $regGroups->{$rg} ) {
-			return $rg;
+	foreach my $arg (keys %{$regGroups}) {
+		if ( $line =~ $regGroups->{$arg} ) {
+			return $arg;
 		}
 	}
 }
@@ -150,7 +150,7 @@ sub proccessLine ($) {
 		return;
 	}
 	$$count++;
-	my $match = $self->matchGroup($line, $$curFile);
+	my $match = $self->matchAggGroup($line, $$curFile);
 
 	if ($match) {
 		# SKIP LINES THAT MATCH CERTAIN GROUPS
