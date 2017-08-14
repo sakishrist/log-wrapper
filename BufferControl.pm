@@ -14,7 +14,7 @@ sub new ($$) {
 							 'count' => 0,
 							 'skipped' => 0,
 							 'aggregated' => 0,
-							 'changed' => 0,
+							 'changed' => 1,
 							 'updatesStart' => undef,
 							 'curFile' => '',
 							 'lastPosIndex' => {},
@@ -147,31 +147,27 @@ sub proccessLine ($) {
 	my $aggregated = \$self->{aggregated};
 	my $posIndex = \$self->{lastPosIndex}->{$$curFile};
 
-
 	chomp( $line );
 
 	# IGNORE EMPTY LINES
 	return if ($line =~ '^$');
 
-	$self->{changed} = 1;
 
 	# MATCH TAIL FILENAME LINES
 	if (my $f = $self->matchTailFilename($line)) {
 		$$curFile = $f;
-		return;
-	}
-	$$count++;
-	my $match = $self->matchAggGroup($line, $$curFile);
+	} else {
+		$self->{changed} = 1;
+		$$count++;
 
-	if ($match) {
-		# SKIP LINES THAT MATCH CERTAIN GROUPS
-		if ($self->skipLine($match)) {
-			$$skipped++;
-			return;
-		}
+		my $match = $self->matchAggGroup($line, $$curFile);
+		my $prevMatch = $buff->[$$posIndex][3] if (defined $$posIndex && defined $buff->[$$posIndex][3]);
 
-		# PROCCESS THE REST OF THE LINES
-		if ( defined $$posIndex && defined $buff->[$$posIndex][3] && $buff->[$$posIndex][3] eq $match ) {
+		# IF THE LINE MATCHES SOME RULE AND ...
+		# IF THE LINE BEFORE THIS ONE WAS MATCHED WITH THE SAME RULE ...
+		my $toUpdate = ($match && $prevMatch && $match eq $prevMatch);
+
+		if ($toUpdate) {
 			$$aggregated++;
 
 			$$updatesStart = $$posIndex;
@@ -185,12 +181,7 @@ sub proccessLine ($) {
 		} else {
 			push(@{$buff}, [$line, 0, $$curFile, $match]);
 			$$posIndex = (scalar @{$buff})-1;
-
-			$buff->[$$posIndex][3] = $match;
 		}
-	} else {
-		push(@{$buff}, [$line, 0, $$curFile]);
-		$$posIndex = (scalar @{$buff})-1;
 	}
 }
 
