@@ -135,53 +135,57 @@ sub matchAggGroup ($$) {
 	}
 }
 
+sub addLine ($) {
+	my $self = shift;
+	my $line = shift;
+
+	chomp ($line);
+
+	my $buff = $self->{buff};
+	my $count = \$self->{count};
+	my $updatesStart = \$self->{updatesStart};
+	my $aggregated = \$self->{aggregated};
+	my $curFile = \$self->{curFile};
+	my $posIndex = \$self->{lastPosIndex}->{$$curFile};
+	#my $skipped = \$self->{skipped};
+
+	$$count++;
+
+	my $match = $self->matchAggGroup($line, $$curFile);
+	my $prevMatch = $buff->[$$posIndex][3] if (defined $$posIndex && defined $buff->[$$posIndex][3]);
+
+	# IF THE LINE MATCHES SOME RULE AND ...
+	# IF THE LINE BEFORE THIS ONE WAS MATCHED WITH THE SAME RULE ...
+	my $toUpdate = ($match && $prevMatch && $match eq $prevMatch);
+
+	if ($toUpdate) {
+		$$aggregated++;
+
+		$$updatesStart = $$posIndex;
+		push(@{$buff}, splice(@{$buff}, $$posIndex, 1));
+		$$posIndex = (scalar @{$buff})-1;
+
+		$self->updateIndices();
+
+		$buff->[(scalar @{$buff})-1][0]=$line;
+		$buff->[(scalar @{$buff})-1][1]++;
+	} else {
+		push(@{$buff}, [$line, 0, $$curFile, $match]);
+		$$posIndex = (scalar @{$buff})-1;
+	}
+}
+
 sub proccessLine ($) {
 	my $self = shift;
 	my $line = shift;
 
-	my $curFile = \$self->{curFile};
-	my $buff = $self->{buff};
-	my $count = \$self->{count};
-	my $updatesStart = \$self->{updatesStart};
-	my $skipped = \$self->{skipped};
-	my $aggregated = \$self->{aggregated};
-	my $posIndex = \$self->{lastPosIndex}->{$$curFile};
+	return if ($line =~ '^$');    # IGNORE EMPTY LINES
 
-	chomp( $line );
-
-	# IGNORE EMPTY LINES
-	return if ($line =~ '^$');
-
-
-	# MATCH TAIL FILENAME LINES
-	if (my $f = $self->matchTailFilename($line)) {
-		$$curFile = $f;
+	if (my $f = $self->matchTailFilename($line)) {    # MATCH TAIL FILENAME LINES
+		$self->{curFile} = $f;
 	} else {
 		$self->{changed} = 1;
-		$$count++;
-
-		my $match = $self->matchAggGroup($line, $$curFile);
-		my $prevMatch = $buff->[$$posIndex][3] if (defined $$posIndex && defined $buff->[$$posIndex][3]);
-
-		# IF THE LINE MATCHES SOME RULE AND ...
-		# IF THE LINE BEFORE THIS ONE WAS MATCHED WITH THE SAME RULE ...
-		my $toUpdate = ($match && $prevMatch && $match eq $prevMatch);
-
-		if ($toUpdate) {
-			$$aggregated++;
-
-			$$updatesStart = $$posIndex;
-			push(@{$buff}, splice(@{$buff}, $$posIndex, 1));
-			$$posIndex = (scalar @{$buff})-1;
-
-			$self->updateIndices();
-
-			$buff->[(scalar @{$buff})-1][0]=$line;
-			$buff->[(scalar @{$buff})-1][1]++;
-		} else {
-			push(@{$buff}, [$line, 0, $$curFile, $match]);
-			$$posIndex = (scalar @{$buff})-1;
-		}
+		$self->addLine($line);
 	}
 }
 
