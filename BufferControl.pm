@@ -47,6 +47,18 @@ sub skipLine ($) {
 	return 0;
 }
 
+sub buildReg () {
+	my $self = shift;
+	my $regs = shift;
+
+	my $str;
+
+	foreach my $r (  @{ $regs }  ) {
+		$str .= (defined $str ? '|' : '') . $r;
+	}
+	return qr/($str)/;
+}
+
 sub compileRegs () {
 	my $self = shift;
 
@@ -55,19 +67,11 @@ sub compileRegs () {
 	my $filesReg = $self->{filesReg};
 
 	foreach my $frg (keys %{$filesReg}) {
-		my $files_str;
-		foreach my $f (  @{ $filesReg->{$frg} }  ) {
-			$files_str .= (defined $files_str ? '|' : '') . $f;
-		}
-		$reg->{$frg} = { 'files' => qr/($files_str)/, 'aggRegs' => {} };
+		$reg->{$frg} = { 'files' => $self->buildReg($filesReg->{$frg}), 'aggRegs' => {}, 'colRegs' => {} };
 	}
 
 	foreach my $arg (keys %{$agRegs}) {
-		my $reg_str;
-		foreach my $r (  @{ $agRegs->{$arg}->{regs} }  ) {
-			$reg_str .= (defined $reg_str ? '|' : '') . $r;
-		}
-		$reg->{ $agRegs->{$arg}->{files} }->{aggRegs}->{$arg} = qr/($reg_str)/;
+		$reg->{ $agRegs->{$arg}->{files} }->{aggRegs}->{$arg} = $self->buildReg($agRegs->{$arg}->{regs});
 	}
 }
 
