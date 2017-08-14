@@ -7,9 +7,7 @@ use IO::Select;
 
 sub new ($$) {
 	my $class = shift;
-	my $agRegs = shift;
-	my $filesReg = shift;
-	my $omit = shift;
+	my ($agRegs, $colRegs, $filesReg, $omit) = @_;
 
 	my $self = {
 							 'buff' => [],
@@ -22,6 +20,7 @@ sub new ($$) {
 							 'lastPosIndex' => {},
 							 'reg' => {},
 							 'agRegs' => $agRegs,
+							 'colRegs' => $colRegs,
 							 'filesReg' => $filesReg,
 							 'omit' => $omit,
 						 };
@@ -64,6 +63,7 @@ sub compileRegs () {
 
 	my $reg = $self->{reg};
 	my $agRegs = $self->{agRegs};
+	my $colRegs = $self->{colRegs};
 	my $filesReg = $self->{filesReg};
 
 	foreach my $frg (keys %{$filesReg}) {
@@ -72,6 +72,13 @@ sub compileRegs () {
 
 	foreach my $arg (keys %{$agRegs}) {
 		$reg->{ $agRegs->{$arg}->{files} }->{aggRegs}->{$arg} = $self->buildReg($agRegs->{$arg}->{regs});
+	}
+
+	foreach my $crg (keys %{$colRegs}) {
+		$reg->{ $colRegs->{$crg}->{files} }->{colRegs}->{$crg} = {
+			'reg' => $self->buildReg($colRegs->{$crg}->{regs}),
+			'col' => $colRegs->{$crg}->{color}
+		}
 	}
 }
 

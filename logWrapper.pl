@@ -38,6 +38,18 @@ our $AGGREGATE_REG = {
 	},
 };
 
+# This is the regex configuration
+our $COLOR_REG = {
+	"MSG" => {
+
+		"files" => 'stats',
+		"color" => '118',
+		"regs" => [
+			', (MSG):\t',
+		],
+	},
+};
+
 # Any reg_groups from above that are found in this array will be skipped entierly
 our $OMMIT_GROUPS = [  ];
 
@@ -68,7 +80,7 @@ $|=1;
 
 our $refresh = 0;
 
-my $buffCon = BufferControl->new($AGGREGATE_REG, $FILE_GROUPS, $OMMIT_GROUPS);
+my $buffCon = BufferControl->new($AGGREGATE_REG, $COLOR_REG, $FILE_GROUPS, $OMMIT_GROUPS);
 our $termCon = TerminalControl->new($buffCon, "/dev/tty");
 
 my $in = Stream->new(*STDIN);
