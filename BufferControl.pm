@@ -108,12 +108,15 @@ sub matchFile ($) {
 	my $file = shift;
 
 	my $reg = $self->{reg};
+	my @files;
 
 	foreach my $frg (keys %{$reg}) {
 		if ( $file =~ $reg->{$frg}->{files} ) {
-			return $frg;
+			push @files, $frg;
 		}
 	}
+
+	return @files;
 }
 
 sub matchAggGroup ($$) {
@@ -121,10 +124,9 @@ sub matchAggGroup ($$) {
 	my $line = shift;
 	my $file = shift;
 
-	my $filesMatch;
-	if (! ( $filesMatch = $self->matchFile($file) )) {
-		return;
-	}
+	my ($filesMatch) = $self->matchFile($file);
+
+	return if (! defined $filesMatch);
 
 	my $regGroups = $self->{reg}->{$filesMatch}->{aggRegs};
 
