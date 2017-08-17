@@ -137,6 +137,35 @@ sub matchAggGroup ($$) {
 	}
 }
 
+sub getCols ($$) {
+	my $self = shift;
+	my $line = shift;
+	my $file = shift;
+
+	my @filesMatch = $self->matchFile($file);
+	#print STDERR Dumper(@filesMatch);
+	#exit;
+	my @positions = ();
+
+	foreach my $f (@filesMatch) {
+		my $colGroups = $self->{reg}->{$f}->{colRegs};
+
+		foreach my $crg (keys %{$colGroups}) {
+			if ( $line =~ $colGroups->{$crg}->{reg} ) {
+
+				for (my $i = 2; $i<(scalar @-); $i++) {
+					push @positions, [ $-[$i], $colGroups->{$crg}->{col} ] ;
+					push @positions, [ $+[$i], -1 ] ;
+				}
+			}
+		}
+	}
+
+	my $sorted;
+	@$sorted = sort { $b->[0] <=> $a->[0] or $b->[1] <=> $a->[1] } @positions;
+	return $sorted;
+}
+
 sub addLine ($) {
 	my $self = shift;
 	my $line = shift;
@@ -169,9 +198,23 @@ sub addLine ($) {
 
 		$buff->[(scalar @{$buff})-1][0] = $line;
 		$buff->[(scalar @{$buff})-1][1]++;
+		$buff->[(scalar @{$buff})-1][4] = $self->getCols($line, $$curFile);
 	} else {
-		push(@{$buff}, [$line, 0, $$curFile, $match]);
+		push(@{$buff}, [$line, 0, $$curFile, $match, $self->getCols($line, $$curFile)]);
 		$$posIndex = (scalar @{$buff})-1;
+	}
+}
+
+sub colorize () {
+	my $self = shift;
+	my $line = $self->{buff}->[(scalar @{$self->{buff}})-1];
+
+	my $buff = $self->{buff};
+	my $curFile = \$self->{curFile};
+
+	foreach my $c (@{$line->[4]}) {
+		my $code = ($c->[1] < 0 ? "\e[0m" : "\e[38;5;".$c->[1]."m");
+		substr($line->[0], $c->[0], 0) = $code;
 	}
 }
 
@@ -204,6 +247,7 @@ sub proccessLine ($) {
 	} else {
 		$self->{changed} = 1;
 		$self->addLine($line);
+		$self->colorize();
 		$self->removeTabs();
 	}
 }
