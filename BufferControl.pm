@@ -163,6 +163,18 @@ sub getCols ($$) {
 
 	my $sorted;
 	@$sorted = sort { $b->[0] <=> $a->[0] or $b->[1] <=> $a->[1] } @positions;
+
+	my @colStack = ();
+	for (my $i = (scalar @$sorted) - 1; $i >= 0; $i--) {
+		if ($sorted->[$i]->[1] < 0) {
+			if (scalar @colStack && pop @colStack && scalar @colStack) {
+				$sorted->[$i]->[1] = $colStack[-1];
+			}
+		} else {
+			push @colStack, $sorted->[$i]->[1];
+		}
+	}
+
 	return $sorted;
 }
 
