@@ -141,8 +141,6 @@ sub addLine ($) {
 	my $self = shift;
 	my $line = shift;
 
-	chomp ($line);
-
 	my $buff = $self->{buff};
 	my $count = \$self->{count};
 	my $updatesStart = \$self->{updatesStart};
@@ -169,7 +167,7 @@ sub addLine ($) {
 
 		$self->updateIndices();
 
-		$buff->[(scalar @{$buff})-1][0]=$line;
+		$buff->[(scalar @{$buff})-1][0] = $line;
 		$buff->[(scalar @{$buff})-1][1]++;
 	} else {
 		push(@{$buff}, [$line, 0, $$curFile, $match]);
@@ -197,6 +195,7 @@ sub removeTabs () {
 sub proccessLine ($) {
 	my $self = shift;
 	my $line = shift;
+	chomp ($line);
 
 	return if ($line =~ '^$');    # IGNORE EMPTY LINES
 
