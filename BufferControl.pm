@@ -238,7 +238,9 @@ sub removeTabs () {
 	my $lastT;
 	foreach my $t (split(/\t/,$line->[0])) {
 		if (defined $lastT) {
-			my $len = (7 - (length $lastT) % 8);
+			$lastT =~ s/\e\[.*?m//g;
+
+			my $len = (8 - (length $lastT) % 8);
 			$withoutTabs .= (" " x $len) if (defined $lastT);
 		}
 		$withoutTabs .= $t;
