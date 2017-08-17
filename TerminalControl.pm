@@ -156,7 +156,7 @@ sub addLine ($) {
 		$len += ($c->[1] < 0 ? 4 : ((length "".$c->[1]) + 8));
 	}
 
-	$$chars .= " | " . substr ($line->[0], 0, $len);
+	$$chars .= " | " . substr ($line->[0], 0, $len) . "\e[0m";
 	$$chars .= " \e[1m(" . ($line->[1]+1) . ")\e[0m" if $line->[1];
 }
 
