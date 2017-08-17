@@ -149,16 +149,10 @@ sub addLine ($) {
 		$$chars .= " ..." . substr ( $line->[2], -27 );
 	}
 
-	my $withoutTabs;
-	foreach my $c (split(/\t/,$line->[0])) {
-		$withoutTabs .= (" " x (8 - (length $c) % 8)) if (defined $withoutTabs);
-		$withoutTabs .= $c;
-	}
-
 	my $len = $self->{cols} - 34;
 	$len -= length ( "" . ($line->[1]+1) ) + 3 if $line->[1];
 
-	$$chars .= " | " . substr ($withoutTabs, 0, $len);
+	$$chars .= " | " . substr ($line->[0], 0, $len);
 	$$chars .= " \e[1m(" . ($line->[1]+1) . ")\e[0m" if $line->[1];
 }
 

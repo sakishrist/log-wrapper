@@ -175,6 +175,23 @@ sub addLine ($) {
 	}
 }
 
+sub removeTabs () {
+	my $self = shift;
+	my $line = $self->{buff}->[(scalar @{$self->{buff}})-1];
+
+	my $withoutTabs = '';
+	my $lastT;
+	foreach my $t (split(/\t/,$line->[0])) {
+		if (defined $lastT) {
+			my $len = (7 - (length $lastT) % 8);
+			$withoutTabs .= (" " x $len) if (defined $lastT);
+		}
+		$withoutTabs .= $t;
+		$lastT = $t;
+	}
+	$line->[0] = $withoutTabs;
+}
+
 sub proccessLine ($) {
 	my $self = shift;
 	my $line = shift;
@@ -186,6 +203,7 @@ sub proccessLine ($) {
 	} else {
 		$self->{changed} = 1;
 		$self->addLine($line);
+		$self->removeTabs();
 	}
 }
 
