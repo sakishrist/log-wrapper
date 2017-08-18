@@ -181,18 +181,18 @@ sub getCols ($$) {
 sub addLine ($) {
 	my $self = shift;
 	my $line = shift;
+	my $curFile = shift;
 
 	my $buff = $self->{buff};
 	my $count = \$self->{count};
 	my $updatesStart = \$self->{updatesStart};
 	my $aggregated = \$self->{aggregated};
-	my $curFile = \$self->{curFile};
-	my $posIndex = \$self->{lastPosIndex}->{$$curFile};
+	my $posIndex = \$self->{lastPosIndex}->{$curFile};
 	#my $skipped = \$self->{skipped};
 
 	$$count++;
 
-	my $match = $self->matchAggGroup($line, $$curFile);
+	my $match = $self->matchAggGroup($line, $curFile);
 	my $prevMatch = $buff->[$$posIndex][3] if (defined $$posIndex && defined $buff->[$$posIndex][3]);
 
 	# IF THE LINE MATCHES SOME RULE AND ...
@@ -210,9 +210,9 @@ sub addLine ($) {
 
 		$buff->[(scalar @{$buff})-1][0] = $line;
 		$buff->[(scalar @{$buff})-1][1]++;
-		$buff->[(scalar @{$buff})-1][4] = $self->getCols($line, $$curFile);
+		$buff->[(scalar @{$buff})-1][4] = $self->getCols($line, $curFile);
 	} else {
-		push(@{$buff}, [$line, 0, $$curFile, $match, $self->getCols($line, $$curFile)]);
+		push(@{$buff}, [$line, 0, $curFile, $match, $self->getCols($line, $curFile)]);
 		$$posIndex = (scalar @{$buff})-1;
 	}
 }
@@ -252,18 +252,13 @@ sub removeTabs () {
 sub proccessLine ($) {
 	my $self = shift;
 	my $line = shift;
+	my $curFile = shift;
 	chomp ($line);
 
-	return if ($line =~ '^$');    # IGNORE EMPTY LINES
-
-	if (my $f = $self->matchTailFilename($line)) {    # MATCH TAIL FILENAME LINES
-		$self->{curFile} = $f;
-	} else {
-		$self->{changed} = 1;
-		$self->addLine($line);
-		$self->colorize();
-		$self->removeTabs();
-	}
+	$self->{changed} = 1;
+	$self->addLine($line, $curFile);
+	$self->colorize();
+	$self->removeTabs();
 }
 
 sub addSeparator () {

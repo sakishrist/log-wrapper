@@ -83,7 +83,11 @@ our $refresh = 0;
 my $buffCon = BufferControl->new($AGGREGATE_REG, $COLOR_REG, $FILE_GROUPS, $OMMIT_GROUPS);
 our $termCon = TerminalControl->new($buffCon, "/dev/tty");
 
-my $in = Stream->new(*STDIN);
+my @inStreams = ();
+
+foreach my $file (@ARGV) {
+	push @inStreams, Stream->new($file);
+}
 
 $SIG{INT} = \&quit;
 $SIG{WINCH} = \&terminalUpdated;
@@ -109,8 +113,10 @@ while (1) {
 		}
 	}
 
-	if ( $in->readLine ) {
-		$buffCon->proccessLine($in->getData());
+	foreach my $stream (@inStreams) {
+		if ( $stream->readLine ) {
+			$buffCon->proccessLine($stream->getData(), $stream->{file});
+		}
 	}
 	$termCon->output($refresh);
 	$refresh = 0;

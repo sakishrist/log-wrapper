@@ -24,9 +24,9 @@ sub new {
 	my $fd;
 
 	if ( ref(\$thing) eq 'GLOB' ) {
-		$self->{fd} = $thing;
 		$fd = $thing;
 	} else {
+		$self->{file} = $thing;
 		open $fd, "<", $thing or die;
 	}
 
