@@ -87,4 +87,14 @@ sub getData() {
 	return $data;
 }
 
+sub getLines() {
+	my $self = shift;
+	if ( defined $self->{data} && $self->{data} =~ /\n/ ) {
+		my @lines = split(/\n/,$self->{data},-1);
+		$self->{data} = pop @lines;
+		return \@lines;
+	}
+	return [];
+}
+
 1;

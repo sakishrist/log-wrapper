@@ -114,8 +114,8 @@ while (1) {
 	}
 
 	foreach my $stream (@inStreams) {
-		if ( $stream->readLine ) {
-			$buffCon->proccessLine($stream->getData(), $stream->{file});
+		if ( $stream->read() ) {
+			$buffCon->proccessLines($stream->getLines(), $stream->{file});
 		}
 	}
 	$termCon->output($refresh);

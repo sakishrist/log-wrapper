@@ -249,16 +249,19 @@ sub removeTabs () {
 	$line->[0] = $withoutTabs;
 }
 
-sub proccessLine ($) {
+sub proccessLines ($) {
 	my $self = shift;
-	my $line = shift;
+	my $lines = shift;
 	my $curFile = shift;
-	chomp ($line);
 
-	$self->{changed} = 1;
-	$self->addLine($line, $curFile);
-	$self->colorize();
-	$self->removeTabs();
+	foreach my $line (@$lines) {
+		chomp ($line);
+
+		$self->{changed} = 1;
+		$self->addLine($line, $curFile);
+		$self->colorize();
+		$self->removeTabs();
+	}
 }
 
 sub addSeparator () {
