@@ -68,16 +68,15 @@ sub read() {
 		my $d;
 		if ( sysread(*$fd, $d, 1024) ) {
 			# I just read ...
-			$self->{data} = $d;
-			return 1;
+			$self->{data} .= $d;
 		} else {
 			# Oops ... it seems it's closed
-			$self->{isopen} = 0;
+			last;
 		}
 	}
 
 	# Apparently no data is waiting to be read
-	return 0;
+	return 1;
 }
 
 sub getData() {
