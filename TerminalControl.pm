@@ -189,6 +189,14 @@ sub constructLines {
 		$$endPos = -1;
 	}
 
+	# If the range to be updated is larger than one screen, adjust the range so that
+	# only the visible range is printed.
+	if ($$newEndPos - $$endPos > $self->{rows} - 1) {
+		$$endPos = $$newEndPos - ($self->{rows} - 1);
+	} elsif ($$endPos - $$newEndPos > $self->{rows} - 1) {
+		$$endPos = $$newEndPos + ($self->{rows} - 1);
+	}
+
 	# While newEndPos is smaller than the current endPos
 	#   Start from FirstInvisibleLineBefore to LastLineToPrint
 	#
