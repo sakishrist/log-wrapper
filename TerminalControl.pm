@@ -153,11 +153,15 @@ sub getActualPos ($$) {
 	return $len;
 }
 
-sub addLine ($) {
+sub addLine ($$$) {
 	my $self = shift;
 	my $linenum = shift;
+	my $lineRow = shift;
+	my $lineCol = shift;
 
 	return if ($linenum < 0 || $linenum > (scalar @{$self->{buffCon}->{buff}})-1);
+
+	$self->mvCur($lineRow, $lineCol);
 
 	my $chars = \$self->{chars};
 	my $line = $self->{buffCon}->{buff}->[$linenum];
@@ -228,8 +232,7 @@ sub constructLines {
 	for (my $linenum = $$endPos + 1 - $self->{rows}; $linenum >= $$newEndPos - $self->{rows} +2; $linenum--) {
 		$self->mvCur(1, 0);
 		$self->revNl();
-		$self->mvCur(2, 0);
-		$self->addLine($linenum);
+		$self->addLine($linenum, 2, 0);
 		$self->clrLine();
 	}
 
@@ -244,7 +247,7 @@ sub constructLines {
 	for (my $linenum = $$endPos + 1; $linenum <= $$newEndPos; $linenum++) {
 		$self->mvCur(-1, 0);
 		$self->nl();
-		$self->addLine($linenum);
+		$self->addLine($linenum, -1, 0);
 		$self->clrLine();
 	}
 
@@ -258,8 +261,7 @@ sub constructLines {
 		#   LastVisibleLine = newEndPos
 		$$updatesStart = $$newEndPos - $self->{rows} + 2  if ( $$updatesStart < -$self->{rows} + $$newEndPos +2);
 		for (my $linenum = $$updatesStart; $linenum <= $$newEndPos; $linenum++) {
-			$self->mvCur($linenum-$$newEndPos-1, 0);
-			$self->addLine($linenum);
+			$self->addLine($linenum, $linenum-$$newEndPos-1, 0);
 			$self->clrLine();
 		}
 	}
