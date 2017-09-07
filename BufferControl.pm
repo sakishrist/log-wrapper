@@ -110,7 +110,7 @@ sub matchFile ($) {
 	my $reg = $self->{reg};
 	my @files;
 
-	foreach my $frg (keys %{$reg}) {
+	foreach my $frg (sort keys %{$reg}) {
 		if ( $file =~ $reg->{$frg}->{files} ) {
 			push @files, $frg;
 		}
@@ -129,8 +129,7 @@ sub matchAggGroup ($$) {
 	return if (! defined $filesMatch);
 
 	my $regGroups = $self->{reg}->{$filesMatch}->{aggRegs};
-
-	foreach my $arg (keys %{$regGroups}) {
+	foreach my $arg (sort keys %{$regGroups}) {
 		if ( $line =~ $regGroups->{$arg} ) {
 			return $arg;
 		}
@@ -150,7 +149,7 @@ sub getCols ($$) {
 	foreach my $f (@filesMatch) {
 		my $colGroups = $self->{reg}->{$f}->{colRegs};
 
-		foreach my $crg (keys %{$colGroups}) {
+		foreach my $crg (sort keys %{$colGroups}) {
 			if ( $line =~ $colGroups->{$crg}->{reg} ) {
 
 				for (my $i = 2; $i<(scalar @-); $i++) {
