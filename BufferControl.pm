@@ -217,19 +217,6 @@ sub addLine ($) {
 	}
 }
 
-sub colorize () {
-	my $self = shift;
-	my $line = $self->{buff}->[(scalar @{$self->{buff}})-1];
-
-	my $buff = $self->{buff};
-	my $curFile = \$self->{curFile};
-
-	foreach my $c (@{$line->[4]}) {
-		my $code = ($c->[1] < 0 ? "\e[0m" : "\e[38;5;".$c->[1]."m");
-		substr($line->[0], $c->[0], 0) = $code;
-	}
-}
-
 sub removeTabs () {
 	my $self = shift;
 	my $line = $self->{buff}->[(scalar @{$self->{buff}})-1];
@@ -259,7 +246,6 @@ sub proccessLines ($) {
 
 		$self->{changed} = 1;
 		$self->addLine($line, $curFile);
-		$self->colorize();
 		$self->removeTabs();
 	}
 }

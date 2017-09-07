@@ -134,23 +134,19 @@ sub mvCur ($$) {
 	$$chars .= "\e[".$r.";".$c."H";
 }
 
-sub getActualPos ($$) {
-	# What this does: For a printable position it translates it to an actual position
-	# in the string as to include the amount of all unprintable characters.
-
+sub colorize () {
 	my $self = shift;
+	my $text = shift;
 	my $colorMap = shift;
-	my $pos = shift;
-	my $len = $pos;
+	my $colorOffset = shift;
+	my $colorLen = shift;
 
-	# Extract the color map only for the range we need
-	foreach my $c (grep {$_->[0] < $pos} @$colorMap) {
+	my $curFile = \$self->{curFile};
 
-		# If color is 'reset' then add 4 to the length; otherwise add depending on the value length.
-		$len += ($c->[1] < 0 ? 4 : ((length "".$c->[1]) + 8));
+	foreach my $c (grep {$_->[0] < $colorLen} @{$colorMap}) {
+		my $code = ($c->[1] < 0 ? "\e[0m" : "\e[38;5;".$c->[1]."m");
+		substr($$text, $c->[0] + $colorOffset, 0) = $code;
 	}
-
-	return $len;
 }
 
 sub addLine ($$$) {
@@ -179,10 +175,10 @@ sub addLine ($$$) {
 	my $len = $self->{cols} - $fileColWidth - 4;
 	$len -= length ( "" . ($line->[1]+1) ) + 3 if $line->[1];
 
-	$len = $self->getActualPos($line->[4], $len);
-
 	$prepLine .= " | " . substr ($line->[0], 0, $len) . "\e[0m";
 	$prepLine .= " \e[1m(" . ($line->[1]+1) . ")\e[0m" if $line->[1];
+
+	$self->colorize(\$prepLine, $line->[4], $fileColWidth + 4, $len);
 
 	$$chars .= $prepLine;
 }
