@@ -159,6 +159,8 @@ sub addLine ($$$) {
 	my $lineRow = shift;
 	my $lineCol = shift;
 
+	my $fileColWidth = 16;
+
 	return if ($linenum < 0 || $linenum > (scalar @{$self->{buffCon}->{buff}})-1);
 
 	$self->mvCur($lineRow, $lineCol);
@@ -168,13 +170,13 @@ sub addLine ($$$) {
 
 	my $prepLine;
 
-	if (length($line->[2]) <= 30) {
-		$prepLine = " " . sprintf ( "%-30s", $line->[2]);
+	if (length($line->[2]) <= $fileColWidth) {
+		$prepLine = " " . sprintf ( '%-' . $fileColWidth . 's', $line->[2]);
 	} else {
-		$prepLine = " ..." . substr ( $line->[2], -27 );
+		$prepLine = " ..." . substr ( $line->[2], -$fileColWidth + 3 );
 	}
 
-	my $len = $self->{cols} - 34;
+	my $len = $self->{cols} - $fileColWidth - 4;
 	$len -= length ( "" . ($line->[1]+1) ) + 3 if $line->[1];
 
 	$len = $self->getActualPos($line->[4], $len);
