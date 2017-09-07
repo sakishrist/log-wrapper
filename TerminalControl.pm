@@ -166,10 +166,12 @@ sub addLine ($$$) {
 	my $chars = \$self->{chars};
 	my $line = $self->{buffCon}->{buff}->[$linenum];
 
+	my $prepLine;
+
 	if (length($line->[2]) <= 30) {
-		$$chars .= " " . sprintf ( "%-30s", $line->[2]);
+		$prepLine = " " . sprintf ( "%-30s", $line->[2]);
 	} else {
-		$$chars .= " ..." . substr ( $line->[2], -27 );
+		$prepLine = " ..." . substr ( $line->[2], -27 );
 	}
 
 	my $len = $self->{cols} - 34;
@@ -177,8 +179,10 @@ sub addLine ($$$) {
 
 	$len = $self->getActualPos($line->[4], $len);
 
-	$$chars .= " | " . substr ($line->[0], 0, $len) . "\e[0m";
-	$$chars .= " \e[1m(" . ($line->[1]+1) . ")\e[0m" if $line->[1];
+	$prepLine .= " | " . substr ($line->[0], 0, $len) . "\e[0m";
+	$prepLine .= " \e[1m(" . ($line->[1]+1) . ")\e[0m" if $line->[1];
+
+	$$chars .= $prepLine;
 }
 
 sub addHeader {
