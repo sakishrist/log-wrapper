@@ -134,6 +134,25 @@ sub mvCur ($$) {
 	$$chars .= "\e[".$r.";".$c."H";
 }
 
+sub getActualPos ($$) {
+	# What this does: For a printable position it translates it to an actual position
+	# in the string as to include the amount of all unprintable characters.
+
+	my $self = shift;
+	my $colorMap = shift;
+	my $pos = shift;
+	my $len = $pos;
+
+	# Extract the color map only for the range we need
+	foreach my $c (grep {$_->[0] < $pos} @$colorMap) {
+
+		# If color is 'reset' then add 4 to the length; otherwise add depending on the value length.
+		$len += ($c->[1] < 0 ? 4 : ((length "".$c->[1]) + 8));
+	}
+
+	return $len;
+}
+
 sub addLine ($) {
 	my $self = shift;
 	my $linenum = shift;
@@ -152,9 +171,7 @@ sub addLine ($) {
 	my $len = $self->{cols} - 34;
 	$len -= length ( "" . ($line->[1]+1) ) + 3 if $line->[1];
 
-	foreach my $c (grep {$_->[0] < $len} @{$line->[4]}) {
-		$len += ($c->[1] < 0 ? 4 : ((length "".$c->[1]) + 8));
-	}
+	$len = $self->getActualPos($line->[4], $len);
 
 	$$chars .= " | " . substr ($line->[0], 0, $len) . "\e[0m";
 	$$chars .= " \e[1m(" . ($line->[1]+1) . ")\e[0m" if $line->[1];
