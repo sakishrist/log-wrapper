@@ -19,7 +19,10 @@ use Stream;
 
 our $FILE_GROUPS = {
 	# The regex that will match the filename
+	'syslog_auth' => [ '(auth.log|syslog)' ],
+	'auth' => [ 'auth.log' ],
 	'stats' => [ '(resourceagent|clustermanager)_[0-9]*\.log' ],
+	'ocperf' => [ 'ocperf_ag_[0-9]*\.log' ],
 };
 
 # This is the regex configuration
@@ -36,17 +39,40 @@ our $AGGREGATE_REG = {
 			'DBG',
 		],
 	},
+
+	'Cron' => {
+		'files' => 'syslog_auth',
+		'regs' => [ 'CRON\[[0-9]*\]:' ]
+	},
 };
 
 # This is the regex configuration
 our $COLOR_REG = {
-	"MSG" => {
+	"Timestamps" => {
 
 		"files" => 'stats',
 		"color" => '118',
 		"regs" => [
-			', (MSG):\t',
+			'(^[^,]*)',
 		],
+	},
+	"Timestamps2" => {
+
+		"files" => 'ocperf',
+		"color" => '118',
+		"regs" => [
+			'^\(([^\)]*)\)',
+		],
+	},
+	'ProcName' => {
+		'files' => 'syslog_auth',
+		'color' => '64',
+		'regs' => [ '[0-9]{2}:[0-9]{2}[^ ]* [^ ]* ([^:\[]*)' ]
+	},
+	'ProcID' => {
+		'files' => 'syslog_auth',
+		'color' => '160',
+		'regs' => [ '[0-9]{2}:[0-9]{2}[^ ]* [^ ]* [^\[]*\[([0-9]*)\]' ]
 	},
 };
 
