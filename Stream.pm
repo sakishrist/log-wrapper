@@ -5,6 +5,7 @@ use strict;
 use warnings;
 use IO::Select;
 use Term::ReadKey;
+use Data::Dumper;
 
 sub new {
 	my $class = shift;
@@ -67,6 +68,7 @@ sub read() {
 		# I should be able to read ...
 		my $d;
 		if ( sysread(*$fd, $d, 1024) ) {
+			#print STDERR "Reading " . (length $d) . " bytes ...\n";
 			# I just read ...
 			$self->{data} .= $d;
 		} else {

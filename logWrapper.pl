@@ -11,7 +11,7 @@ use TerminalControl;
 use BufferControl;
 use Stream;
 
-#use Data::Dumper;
+use Data::Dumper;
 
 #########################
 #        CONFIG         #
@@ -86,6 +86,9 @@ our $OMMIT_GROUPS = [  ];
 sub quit {
 	our $termCon;
 
+	our $buffCon;
+
+	#print STDERR Dumper($buffCon);
 	$termCon->endAlternate();
 	exit;
 }
@@ -106,7 +109,7 @@ $|=1;
 
 our $refresh = 0;
 
-my $buffCon = BufferControl->new($AGGREGATE_REG, $COLOR_REG, $FILE_GROUPS, $OMMIT_GROUPS);
+our $buffCon = BufferControl->new($AGGREGATE_REG, $COLOR_REG, $FILE_GROUPS, $OMMIT_GROUPS);
 our $termCon = TerminalControl->new($buffCon, "/dev/tty");
 
 my @inStreams = ();
