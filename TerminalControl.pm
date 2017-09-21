@@ -170,11 +170,16 @@ sub addLine ($$$) {
 
 	my $fileColWidth = 16;
 
-	return if ($linenum < 0 || $linenum > (scalar @{$self->{buffCon}->{buff}})-1);
 
 	$self->mvCur($lineRow, $lineCol);
 
 	my $chars = \$self->{chars};
+
+	if ($linenum < 0 || $linenum > (scalar @{$self->{buffCon}->{buff}})-1) {
+		$self->clrLine();
+		return;
+	}
+
 	my $line = $self->{buffCon}->{buff}->[$linenum];
 
 	my $prepLine;
