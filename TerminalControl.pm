@@ -54,34 +54,9 @@ our $parse = {
 	"\n" => "separator",
 };
 
-#########################
-#       METHODS         #
-#########################
-
-sub new ($$) {
-	my $class = shift;
-	my $buffCon = shift;
-	my $in = shift;
-	our $parse;
-
-	my $self = { 'buffCon' => $buffCon, # Used to store a BufferControler object
-	             'chars' => '', # The character buffer used for preparation before printing
-	             'follow' => 1,
-	             'endPos' => -1,
-	             'changed' => 0,
-	             'newEndPos' => -1,
-	             'in' => Stream->new($in, 1),
-	             'inBuff' => '',
-	             'parsePos' => $parse,
-	             'parse' => $parse,
-	           };
-
-	bless $self, $class;
-
-	$self->updateWinsize();
-
-	return $self;
-}
+#############################
+#   TERMINAL INTERFACING    #
+#############################
 
 sub startAlternate {
 	# Enter the alternate screen mode
@@ -145,6 +120,43 @@ sub mvCur ($$) {
 	$c = $self->{cols} + $c +1 if ($c < 0);
 
 	$$chars .= "\e[".$r.";".$c."H";
+}
+
+sub print {
+	my $self = shift;
+
+	my $chars = \$self->{chars};
+	print $$chars;
+	$$chars = '';
+}
+
+#############################
+#  METHODS FOR PREPARATION  #
+#############################
+
+sub new ($$) {
+	my $class = shift;
+	my $buffCon = shift;
+	my $in = shift;
+	our $parse;
+
+	my $self = { 'buffCon' => $buffCon, # Used to store a BufferControler object
+	             'chars' => '', # The character buffer used for preparation before printing
+	             'follow' => 1,
+	             'endPos' => -1,
+	             'changed' => 0,
+	             'newEndPos' => -1,
+	             'in' => Stream->new($in, 1),
+	             'inBuff' => '',
+	             'parsePos' => $parse,
+	             'parse' => $parse,
+	           };
+
+	bless $self, $class;
+
+	$self->updateWinsize();
+
+	return $self;
 }
 
 sub colorize () {
@@ -212,7 +224,10 @@ sub addHeader {
 
 	my $chars = \$self->{chars};
 
-	$$chars .= "\e[1;1H\e[30;43m Printed: " . ($count-$skipped-$aggregated) . " - Skipped: $skipped - Aggregated: $aggregated\e[K\e[0m";
+	$self->mvCur(1, 1);
+	$$chars .= "\e[30;43m Printed: " . ($count-$skipped-$aggregated) . " - Skipped: $skipped - Aggregated: $aggregated";
+	$self->clrLine();
+	$$chars .= "\e[0m";
 }
 
 sub constructLines {
@@ -350,14 +365,6 @@ sub output {
 		$self->{changed} = 0;
 		$self->{buffCon}->{changed} = 0;
 	}
-}
-
-sub print {
-	my $self = shift;
-
-	my $chars = \$self->{chars};
-	print $$chars;
-	$$chars = '';
 }
 
 sub getCommands {
