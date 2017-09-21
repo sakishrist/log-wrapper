@@ -168,8 +168,10 @@ sub addLine ($$$) {
 	my $lineRow = shift;
 	my $lineCol = shift;
 
-	my $fileColWidth = 16;
+	$lineRow = $self->{rows} + $lineRow +1 if ($lineRow < 0);
+	$lineCol = $self->{cols} + $lineCol +1 if ($lineCol < 0);
 
+	my $fileColWidth = 16;
 
 	$self->mvCur($lineRow, $lineCol);
 
@@ -254,9 +256,9 @@ sub constructLines {
 	#   DiffBetweenPositions = endPos - newEndPos
 	#     SO: LastLineToPrint = newEndPos - rows + 2
 	for (my $linenum = $$endPos + 1 - $self->{rows}; $linenum >= $$newEndPos - $self->{rows} +2; $linenum--) {
-		$self->mvCur(1, 0);
+		$self->mvCur(1, 1);
 		$self->revNl();
-		$self->addLine($linenum, 2, 0);
+		$self->addLine($linenum, 2, 1);
 		$self->clrLine();
 	}
 
@@ -273,9 +275,9 @@ sub constructLines {
 	#
 	#     SO: LastLineToPrint =  newEndPos
 	for (my $linenum = $$endPos + 1; $linenum <= $$newEndPos; $linenum++) {
-		$self->mvCur(-1, 0);
+		$self->mvCur(-1, 1);
 		$self->nl();
-		$self->addLine($linenum, -1, 0);
+		$self->addLine($linenum, -1, 1);
 		$self->clrLine();
 	}
 
