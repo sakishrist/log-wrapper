@@ -22,6 +22,19 @@ require 'sys/ioctl.ph';
 #   EXIT ALTERNATE SCREEN     = \e[?1049l
 #   REVERSE LINE FEED =       = \eM
 
+# * output
+#   * constructLines
+#     * Print Above Screen
+#     * Print Below Screen
+#     * Did we mess anything in the above two steps?
+#       * Mark lines that need updating
+#     * Update Lines (Either because they were updated by the buffer or because they have overlays)
+#         The actual update is performed from the first line that needs updating, to the last line before the newly added.
+#       * Insert overlay blocks   !!! TODO: The colorize function should work with ranges.
+#
+#
+#
+
 #########################
 #         INIT          #
 #########################
@@ -220,6 +233,10 @@ sub constructLines {
 		$$endPos = $$newEndPos + ($self->{rows} - 1);
 	}
 
+	# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+	# Print old lines outside of the buffer (above screen)        #
+	# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+	#
 	# While newEndPos is smaller than the current endPos
 	#   Start from FirstInvisibleLineBefore to LastLineToPrint
 	#
@@ -238,6 +255,10 @@ sub constructLines {
 		$self->clrLine();
 	}
 
+	# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+	# Print new lines by advancing the buffer                     #
+	# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+	#
 	# While newEndPos is greater than the current endPos
 	#   Start from FirstInvisibleLineAfter to LastLineToPrint
 	#
@@ -253,8 +274,13 @@ sub constructLines {
 		$self->clrLine();
 	}
 
+	# If we have a position from which we have to update lines that changed ...
 	if (defined $$updatesStart) {
 
+		# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+		# Update existing lines without moving the buffer             #
+		# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+		#
 		# If ProcFrom is above FirstVisibleLine
 		#   ProcFrom = FirstVisibleLine
 		#   FirstVisibleLine = LastVisibleLine - (rows + 2)
@@ -284,14 +310,19 @@ sub scroll {
 
 	$self->{changed} = 1;
 
+	# If we have no position or position is larger than the buffer ...
 	if ( (! defined $diff) || ( ($$newEndPos + $diff) > ((scalar @{$buff})-1) ) ) {
+		# Go to the end
 		$$newEndPos = (scalar @{$buff})-1;
-	} elsif (($$newEndPos + $diff) < 0) {
+	} elsif (($$newEndPos + $diff) < 0) { # If endPos is smaller than the start of buffer
+		# Go to start
 		$$newEndPos = 0;
 	} else {
+		# Apply the position change
 		$$newEndPos += $diff;
 	}
 
+	# Follow any new lines if we are at the end
 	if ($$newEndPos == (scalar @{$buff})-1) {
 		$$follow = 1;
 	} else {
