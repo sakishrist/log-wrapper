@@ -265,6 +265,7 @@ sub addSeparator () {
 	my $buff = $self->{buff};
 
 	$self->addLine("", "", 1);
+	$self->{changed} = 1;
 }
 
 1;
