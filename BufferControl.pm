@@ -6,6 +6,8 @@ use warnings;
 use IO::Select;
 use Data::Dumper;
 
+# buff [ Text, Aggregations, Filename, Rule match, Cols, Meta ]
+
 sub new ($$) {
 	my $class = shift;
 	my ($agRegs, $colRegs, $filesReg, $omit) = @_;
@@ -182,6 +184,8 @@ sub addLine ($) {
 	my $self = shift;
 	my $line = shift;
 	my $curFile = shift;
+	my $isMeta = shift;
+	$isMeta = 0 unless defined $isMeta;
 
 	my $buff = $self->{buff};
 	my $count = \$self->{count};
@@ -192,8 +196,13 @@ sub addLine ($) {
 
 	$$count++;
 
-	my $match = $self->matchAggGroup($line, $curFile);
-	my $prevMatch = $buff->[$$posIndex][3] if (defined $$posIndex && defined $buff->[$$posIndex][3]);
+	my $match;
+	my $prevMatch;
+
+	unless ($isMeta) {
+		$match = $self->matchAggGroup($line, $curFile);
+		$prevMatch = $buff->[$$posIndex][3] if (defined $$posIndex && defined $buff->[$$posIndex][3]);
+	}
 
 	# IF THE LINE MATCHES SOME RULE AND ...
 	# IF THE LINE BEFORE THIS ONE WAS MATCHED WITH THE SAME RULE ...
@@ -212,7 +221,7 @@ sub addLine ($) {
 		$buff->[(scalar @{$buff})-1][1]++;
 		$buff->[(scalar @{$buff})-1][4] = $self->getCols($line, $curFile);
 	} else {
-		push(@{$buff}, [$line, 0, $curFile, $match, $self->getCols($line, $curFile)]);
+		push(@{$buff}, [$line, 0, $curFile, $match, $self->getCols($line, $curFile), $isMeta]);
 		$$posIndex = (scalar @{$buff})-1;
 	}
 }
@@ -255,7 +264,7 @@ sub addSeparator () {
 
 	my $buff = $self->{buff};
 
-	push(@{$buff}, ["", 0, ""]);
+	$self->addLine("", "", 1);
 }
 
 1;

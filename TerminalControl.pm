@@ -195,22 +195,27 @@ sub addLine ($$$) {
 	}
 
 	my $line = $self->{buffCon}->{buff}->[$linenum];
-
 	my $prepLine;
+	my $isMeta = $line->[5];
 
-	if (length($line->[2]) <= $fileColWidth) {
-		$prepLine = " " . sprintf ( '%-' . $fileColWidth . 's', $line->[2]);
-	} else {
-		$prepLine = " ..." . substr ( $line->[2], -$fileColWidth + 3 );
+	if ($isMeta) { # META LINE
+		my $len = $self->{cols} - 1;
+		$prepLine .= substr ($line->[0], 0, $len) . "\e[0m";
+	} else { # NORMAL LINE
+		if (length($line->[2]) <= $fileColWidth) {
+			$prepLine = " " . sprintf ( '%-' . $fileColWidth . 's', $line->[2]);
+		} else {
+			$prepLine = " ..." . substr ( $line->[2], -$fileColWidth + 3 );
+		}
+
+		my $len = $self->{cols} - $fileColWidth - 4;
+		$len -= length ( "" . ($line->[1]+1) ) + 3 if $line->[1];
+
+		$prepLine .= " | " . substr ($line->[0], 0, $len) . "\e[0m";
+		$prepLine .= " \e[1m(" . ($line->[1]+1) . ")\e[0m" if $line->[1];
+
+		$self->colorize(\$prepLine, $line->[4], $fileColWidth + 4, $len);
 	}
-
-	my $len = $self->{cols} - $fileColWidth - 4;
-	$len -= length ( "" . ($line->[1]+1) ) + 3 if $line->[1];
-
-	$prepLine .= " | " . substr ($line->[0], 0, $len) . "\e[0m";
-	$prepLine .= " \e[1m(" . ($line->[1]+1) . ")\e[0m" if $line->[1];
-
-	$self->colorize(\$prepLine, $line->[4], $fileColWidth + 4, $len);
 
 	$$chars .= $prepLine;
 }
