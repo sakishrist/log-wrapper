@@ -6,6 +6,8 @@ use warnings;
 
 use Time::HiRes qw( usleep );
 use Switch;
+use Linux::Inotify2;
+use File::Find;
 
 use TerminalControl;
 use BufferControl;
@@ -101,6 +103,31 @@ sub terminalUpdated {
 	$refresh = 1;
 }
 
+my $inotify;
+sub handleFile {
+	our @inStreams;
+	my $file = shift;
+	if (-d $file) {
+		print STDERR "Found DIR $file. \n";
+		$inotify->watch (
+			$file,
+			IN_CREATE,
+			sub {
+				my $e = shift;
+				find(
+					sub {
+						handleFile($File::Find::name);
+					},
+					$e->fullname
+				);
+			}
+		);
+	} else {
+		print STDERR "Found FILE $file. Adding...\n";
+		push @inStreams, Stream->new($file);
+	}
+}
+
 #########################
 #         INIT          #
 #########################
@@ -112,10 +139,17 @@ our $refresh = 0;
 our $buffCon = BufferControl->new($AGGREGATE_REG, $COLOR_REG, $FILE_GROUPS, $OMMIT_GROUPS);
 our $termCon = TerminalControl->new($buffCon, "/dev/tty");
 
-my @inStreams = ();
+our @inStreams = ();
+
+$inotify = new Linux::Inotify2 or die "unable to create new inotify object: $!";
+$inotify->blocking (0);
 
 foreach my $file (@ARGV) {
-	push @inStreams, Stream->new($file);
+	if (-d $file) {
+		find(sub { handleFile($File::Find::name); }, $file);
+	} else {
+		push @inStreams, Stream->new($file);
+	}
 }
 
 $SIG{INT} = \&quit;
@@ -149,6 +183,7 @@ while (1) {
 	}
 	$termCon->output($refresh);
 	$refresh = 0;
+	$inotify->poll;
 	usleep(100);
 }
 
