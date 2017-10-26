@@ -105,8 +105,10 @@ sub terminalUpdated {
 
 my $inotify;
 sub handleFile {
+	our $buffCon;
 	our @inStreams;
 	my $file = shift;
+
 	if (-d $file) {
 		print STDERR "Found DIR $file. \n";
 		$inotify->watch (
@@ -124,6 +126,7 @@ sub handleFile {
 		);
 	} else {
 		print STDERR "Found FILE $file. Adding...\n";
+		$buffCon->addLine(" ### New File: $file ###", "", 1);
 		push @inStreams, Stream->new($file);
 	}
 }
