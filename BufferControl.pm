@@ -196,6 +196,8 @@ sub addLine ($) {
 
 	$$count++;
 
+	$self->{changed} = 1;
+	
 	my $match;
 	my $prevMatch;
 
@@ -253,7 +255,6 @@ sub proccessLines ($) {
 	foreach my $line (@$lines) {
 		chomp ($line);
 
-		$self->{changed} = 1;
 		$self->addLine($line, $curFile);
 		$self->removeTabs();
 	}
@@ -265,7 +266,6 @@ sub addSeparator () {
 	my $buff = $self->{buff};
 
 	$self->addLine("", "", 1);
-	$self->{changed} = 1;
 }
 
 1;
